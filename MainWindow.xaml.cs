@@ -408,8 +408,21 @@ public partial class MainWindow : Window
 
     private void UpdateLogClip()
     {
-        if (LogBoxClipGeom != null && LogBoxWrapper != null && LogBoxWrapper.ActualWidth > 0)
-            LogBoxClipGeom.Rect = new Rect(0, 0, LogBoxWrapper.ActualWidth, LogBoxWrapper.ActualHeight);
+        if (LogBoxClipGeom == null || LogBoxWrapper == null) return;
+
+        // The log grows with the window instead of staying at a fixed 270 px.
+        double available = MainPage.ActualHeight > 0 ? MainPage.ActualHeight : MainGrid.ActualHeight;
+        double logH = Math.Max(270, available - 430);
+        if (Math.Abs(LogBoxWrapper.Height - logH) > 1)
+        {
+            LogBoxWrapper.Height = logH;
+            LogBox.Height = logH;
+        }
+
+        double logW = LogBoxWrapper.ActualWidth > 0
+            ? LogBoxWrapper.ActualWidth
+            : (MainGrid.ActualWidth > 0 ? MainGrid.ActualWidth - 64 : 1200);
+        LogBoxClipGeom.Rect = new Rect(0, 0, logW, logH);
     }
 
     private void UpdateWindowChromeState()
@@ -5384,6 +5397,10 @@ public partial class MainWindow : Window
         }
 
         var ct = BeginPreparation();
+
+        // Immediate visual feedback on start, symmetric to the stop effect.
+        StartGlow();
+        AppendLog("Запуск служб...", "info");
 
         if (_settings.Mode == FixMode.Fast)
         {
