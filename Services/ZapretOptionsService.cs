@@ -203,7 +203,7 @@ public static class ZapretOptionsService
         try
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(25) };
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("NetFix/1.0");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BypassDPI-WPF/1.0");
 
             var response = await client.GetAsync(RemoteIPSetUrl);
             if (!response.IsSuccessStatusCode)
@@ -255,7 +255,7 @@ public static class ZapretOptionsService
             }
 
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("NetFix/1.0");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BypassDPI-WPF/1.0");
 
             var randomQuery = $"{RemoteHostsUrl}?t={Guid.NewGuid():N}";
             var response = await client.GetAsync(randomQuery);
@@ -316,8 +316,8 @@ public static class ZapretOptionsService
 
             var localText = await File.ReadAllTextAsync(hostsPath);
 
-            const string HeaderMarker = "# --- NETFIX / ZAPRET HOSTS BLOCK START ---";
-            const string FooterMarker = "# --- NETFIX / ZAPRET HOSTS BLOCK END ---";
+            const string HeaderMarker = "# --- BYPASSDPI / ZAPRET HOSTS BLOCK START ---";
+            const string FooterMarker = "# --- BYPASSDPI / ZAPRET HOSTS BLOCK END ---";
 
             string updatedContent;
 

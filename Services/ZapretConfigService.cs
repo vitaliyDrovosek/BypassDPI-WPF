@@ -15,7 +15,7 @@ public class ZapretConfigService
 {
     private static readonly string CacheFile = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "NetFix", "zapret_configs.json");
+        "BypassDPI-WPF", "zapret_configs.json");
 
     private static readonly Regex ConfigRegex = new Regex(@"\[(\d+)/(\d+)\]\s+(.+\.bat)", RegexOptions.Compiled);
     private static readonly Regex TestLineRegex = new Regex(
@@ -29,6 +29,20 @@ public class ZapretConfigService
     {
         try
         {
+            // Переносим кэш конфигов из старой папки оригинальной программы.
+            if (!File.Exists(CacheFile))
+            {
+                var legacy = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "NetFix", "zapret_configs.json");
+                if (File.Exists(legacy))
+                {
+                    var dir = Path.GetDirectoryName(CacheFile);
+                    if (dir != null) Directory.CreateDirectory(dir);
+                    File.Copy(legacy, CacheFile, true);
+                }
+            }
+
             if (!File.Exists(CacheFile)) return null;
             var json = File.ReadAllText(CacheFile);
             return JsonSerializer.Deserialize<ZapretConfigCache>(json);

@@ -9,7 +9,7 @@ namespace NetFix.Services;
 
 public class UpdateService
 {
-    private const string GitHubRepo = "rupleide/NetFix";
+    private const string GitHubRepo = "vitaliyDrovosek/BypassDPI-WPF";
     private const string ApiUrl = $"https://api.github.com/repos/{GitHubRepo}/releases/latest";
 
     public static async Task<(bool hasUpdate, string newVersion, string downloadUrl, string error)> CheckAsync(bool useWebFallback = false)
@@ -26,7 +26,7 @@ public class UpdateService
                 ServerCertificateCustomValidationCallback = (_, _, _, _) => true
             };
             using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("NetFix/1.0");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("BypassDPI-WPF/1.0");
 
             var json = await http.GetStringAsync(ApiUrl);
             var doc = System.Text.Json.JsonDocument.Parse(json);
@@ -116,12 +116,12 @@ public class UpdateService
                     }
                     catch
                     {
-                        downloadUrl = $"https://github.com/{GitHubRepo}/releases/download/{latestTag}/NetFix_Setup_{latestTag}.exe";
+                        downloadUrl = $"https://github.com/{GitHubRepo}/releases/download/{latestTag}/BypassDPI-WPF_Setup_{latestTag}.exe";
                     }
 
                     if (string.IsNullOrEmpty(downloadUrl))
                     {
-                        downloadUrl = $"https://github.com/{GitHubRepo}/releases/download/{latestTag}/NetFix_Setup.exe";
+                        downloadUrl = $"https://github.com/{GitHubRepo}/releases/download/{latestTag}/BypassDPI-WPF_Setup.exe";
                     }
 
                     string currentVersion = System.Reflection.Assembly
@@ -144,14 +144,14 @@ public class UpdateService
 
     public static async Task DownloadAndInstallAsync(string downloadUrl, Action<int>? onProgress = null)
     {
-        string tempPath = Path.Combine(Path.GetTempPath(), "NetFix_Setup.exe");
+        string tempPath = Path.Combine(Path.GetTempPath(), "BypassDPI-WPF_Setup.exe");
 
         using var handler = new HttpClientHandler
         {
             ServerCertificateCustomValidationCallback = (_, _, _, _) => true
         };
         using var http = new HttpClient(handler);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("NetFix/1.0");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("BypassDPI-WPF/1.0");
 
         using var response = await http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
         var totalBytes = response.Content.Headers.ContentLength ?? 0;

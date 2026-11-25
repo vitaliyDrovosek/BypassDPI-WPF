@@ -301,7 +301,7 @@ public static class ConnectionAnalysisService
                     string line = rawLine.Trim();
                     if (string.IsNullOrWhiteSpace(line)) continue;
 
-                    if (line.Contains("NetFix", StringComparison.OrdinalIgnoreCase))
+                    if ((line.Contains("BYPASSDPI", StringComparison.OrdinalIgnoreCase) || line.Contains("NetFix", StringComparison.OrdinalIgnoreCase)))
                     {
                         isNetFixSection = true;
                     }
@@ -321,7 +321,7 @@ public static class ConnectionAnalysisService
                             {
                                 Ip = ip,
                                 Hostname = hostname,
-                                IsNetFixManaged = isNetFixSection || hostname.Contains("telegram") || hostname.Contains("discord")
+                                IsForkManaged = isNetFixSection || hostname.Contains("telegram") || hostname.Contains("discord")
                             };
                             result[hostname] = entry;
                             result[ip] = entry;
@@ -411,7 +411,7 @@ public static class ConnectionAnalysisService
             {
                 isHosts = true;
                 domain = string.IsNullOrEmpty(domain) ? hostsEntry.Hostname : domain;
-                dnsSource = hostsEntry.IsNetFixManaged ? "hosts (NetFix)" : "hosts-файл";
+                dnsSource = hostsEntry.IsForkManaged ? "hosts (BypassDPI-WPF)" : "hosts-файл";
                 dnsDetails = $"Запись в hosts: {hostsEntry.Hostname} ➔ {hostsEntry.Ip}";
                 hostsCount++;
             }

@@ -12,8 +12,8 @@ namespace NetFix;
 
 public partial class App : Application
 {
-    private const string MutexName = "NetFix_SingleInstance_Mutex";
-    private const string PipeName = "NetFix_SingleInstance_Pipe";
+    private const string MutexName = "BypassDPI-WPF_SingleInstance_Mutex";
+    private const string PipeName = "BypassDPI-WPF_SingleInstance_Pipe";
     private static Mutex? _mutex;
     private static CancellationTokenSource? _pipeCts;
 
@@ -25,6 +25,19 @@ public partial class App : Application
             SignalExistingInstance();
             Shutdown();
             return;
+        }
+
+        if (!SettingsService.IsLegalNoticeAccepted)
+        {
+            const string notice =
+                "ВНИМАНИЕ! Вы запускаете неофициальный форк программы NetFix. " +
+                "Оригинальный автор (rupleide) не имеет отношения к этой сборке, " +
+                "не гарантирует её безопасность и не оказывает поддержку. " +
+                "Оригинальный чистый NetFix доступен по адресу: github.com/rupleide/NetFix";
+
+            System.Windows.MessageBox.Show(notice, "Неофициальная сборка",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+            SettingsService.MarkLegalNoticeAccepted();
         }
 
         base.OnStartup(e);

@@ -53,7 +53,7 @@ public static class GitHubAvailabilityChecker
                 cts.CancelAfter(TimeSpan.FromSeconds(6));
 
                 using HttpClient http = new HttpClient();
-                http.DefaultRequestHeaders.UserAgent.ParseAdd("NetFix/1.0");
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("BypassDPI-WPF/1.0");
 
                 using HttpResponseMessage response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cts.Token);
 

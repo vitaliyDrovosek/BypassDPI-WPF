@@ -181,90 +181,9 @@ public partial class MainWindow : Window
         };
     }
 
-    private DispatcherTimer? _gameTimer;
-    private List<NoteEntry> _pendingNotes = new();
-    private List<NoteEntry> _activeNotes = new();
-    private int _gameScore, _gameCombo, _totalNotes, _hitNotes;
-    private Stopwatch _gameClock = new();
-    private double _currentFallSec = 1.6;
-    private double _judgeVisibleUntil = -1;
-    private readonly double[] _hitZoneFlashUntil = new double[4];
-    private int _missCount = 0;
-    private int _consecutiveMisses = 0;
-    private bool _gameOverTriggered = false;
-    private DispatcherTimer? _auroraGameTimer;
-    private int _lastComboAuraLevel = 0;
-    private Color _currentComboColor = Color.FromRgb(0xff, 0xd7, 0x00);
-
-    private bool _halfwayTriggered = false;
-    private bool _dangerModeActive = false;
-    private DispatcherTimer? _dangerPulseTimer;
-    private int _perfectStreak = 0;
-    private readonly HashSet<int> _activeLanes = [];
-    private readonly HashSet<int> _hitLanesThisFrame = [];
-
-    private readonly System.Collections.Concurrent.ConcurrentQueue<Action> _effectQueue = new();
-    private DispatcherTimer? _effectTimer;
-
     private readonly DiscordRpcService _discord = new();
-    private DateTime _gameStartDateTime;
-    private DispatcherTimer? _discordGameTimer;
-    private DispatcherTimer? _discordEditorTimer;
-    private int _maxCombo = 0;
-    private string _currentTrackTitle = "";
-    private bool _isInGame = false;
 
-    private readonly SolidColorBrush[] _laneBrushes = LaneColors
-        .Select(c => new SolidColorBrush(c)).ToArray();
-    private readonly LinearGradientBrush[] _noteGradients = LaneColors
-        .Select(c => new LinearGradientBrush(
-            Color.FromArgb(80, c.R, c.G, c.B),
-            Color.FromArgb(20, c.R, c.G, c.B), 90))
-        .ToArray();
-
-    private DispatcherTimer? _starTimer;
-    private int _starBurst = 0;
-    private static readonly string[] StarChars = { "★", "✦", "✧" };
-
-    private System.Windows.Media.MediaPlayer _editorPlayer = new();
-    private System.Windows.Media.MediaPlayer _previewPlayer = new();
-    private bool _previewPlaying = false;
-    private List<NoteEntry> _recordedNotes = new();
-    private string? _editorMp3Path;
-    private bool _editorRecording = false;
-
-    private static readonly string LevelsDir =
-        System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "NetFix", "levels");
-
-    private static readonly string OsuLevelsDir =
-        System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "NetFix", "osu_levels");
-
-    private static readonly string BuiltInTracksDir =
-        System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Tracks");
-
-    private Border? _gameOverlayPanel = null;
-    private bool _gameOverlayActive = false;
-
-    private UIElement? _oszReturnView = null;
-
-    private DispatcherTimer? _countdownTimer = null;
-
-    private List<NoteEntry>? _lastGameNotes = null;
-    private string? _lastGameMp3Path = null;
-    private string? _lastGameTitle = null;
-    private double _lastGameBpm = 0;
-    private string? _pendingOszPath;
-
-    private ICollectionView? _userTracksView;
-    private ICollectionView? _osuTracksView;
-    private string _userSearchText = string.Empty;
     private bool _isEntranceAnimating = false;
-    private string _osuSearchText = string.Empty;
-    private string _statsSearchText = string.Empty;
     private bool _wasClosedToTray = false;
 
     private bool _settingsLoaded;
@@ -451,7 +370,7 @@ public partial class MainWindow : Window
             && Process.GetProcessesByName("TgWsProxy").Length == 0)
         {
             _ = Task.Delay(TimeSpan.FromSeconds(2)).ContinueWith(_ =>
-                Dispatcher.Invoke(() => StartTgWsProxyWithActivation()),
+                Dispatcher.Invoke(StartTgWsProxyProcess),
                 TaskScheduler.Default);
         }
 
@@ -488,7 +407,7 @@ public partial class MainWindow : Window
         {
             Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!),
             Visible = true,
-            Text = "NetFix"
+            Text = "BypassDPI-WPF"
         };
 
         _trayIcon.MouseClick += (_, e) =>
@@ -620,72 +539,6 @@ public partial class MainWindow : Window
         System.Windows.Application.Current.Shutdown();
     }
 
-    private async Task ActivateTgWsProxyAsync()
-    {
-        try
-        {
-            await Task.Delay(2500);
-
-            string? proxyUrl = await Task.Run(() => GetTgWsProxyUrl());
-
-            if (!string.IsNullOrEmpty(proxyUrl))
-            {
-                Process.Start(new ProcessStartInfo(proxyUrl) { UseShellExecute = true });
-            }
-            else
-            {
-                await Task.Run(() => ClickTrayIconByProcess("TgWsProxy"));
-            }
-        }
-        catch
-        {
-        }
-    }
-
-    private string? GetTgWsProxyUrl()
-    {
-        try
-        {
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string configPath = Path.Combine(appData, "TgWsProxy", "config.json");
-
-            if (File.Exists(configPath))
-            {
-                string json = File.ReadAllText(configPath);
-                string? host = ExtractJsonValue(json, "host");
-                string? port = ExtractJsonValue(json, "port");
-                string? secret = ExtractJsonValue(json, "secret");
-
-                if (!string.IsNullOrEmpty(host) && !string.IsNullOrEmpty(port) && !string.IsNullOrEmpty(secret))
-                {
-                    string linkHost = host == "0.0.0.0" ? "127.0.0.1" : host;
-                    return $"tg://proxy?server={linkHost}&port={port}&secret=dd{secret}";
-                }
-            }
-
-            return null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private string? ExtractJsonValue(string json, string key)
-    {
-        try
-        {
-            string pattern = $"\"{key}\"\\s*:\\s*\"?([^,\"}}]+)\"?";
-            var match = System.Text.RegularExpressions.Regex.Match(json, pattern);
-            if (match.Success)
-            {
-                return match.Groups[1].Value.Trim();
-            }
-        }
-        catch { }
-        return null;
-    }
-
     private void ClickTrayIconByProcess(string processName)
     {
         try
@@ -729,8 +582,6 @@ public partial class MainWindow : Window
 
     private async void ServicesBtn_Click(object s, RoutedEventArgs e)
     {
-        StopGame();
-        StopEditorRecording();
 
         UpdateSelectedConfigDisplay();
 
@@ -799,7 +650,7 @@ public partial class MainWindow : Window
                             ShowFullScanRequiredNotification(
                                 "Конфиги Zapret не найдены",
                                 "Приложение не смогло обнаружить рабочие конфиги для Zapret.\n\n" +
-                                "Сначала пройдите полное сканирование, чтобы NetFix нашёл доступные конфиги и подготовил запуск сервиса.");
+                                "Сначала пройдите полное сканирование, чтобы BypassDPI-WPF нашёл доступные конфиги и подготовил запуск сервиса.");
                             _zapretToggleFails = 0;
                             return;
                         }
@@ -865,16 +716,10 @@ public partial class MainWindow : Window
             }
             else
             {
-                if (!string.IsNullOrEmpty(_settings.TgWsProxyPath) && File.Exists(_settings.TgWsProxyPath))
-                {
-                    Process.Start(new ProcessStartInfo(_settings.TgWsProxyPath) { UseShellExecute = true });
-
-                    await ActivateTgWsProxyAsync();
-                }
-                else
-                {
+                if (string.IsNullOrEmpty(_settings.TgWsProxyPath) || !File.Exists(_settings.TgWsProxyPath))
                     return;
-                }
+
+                StartTgWsProxyProcess();
             }
 
             await Task.Delay(2000);
@@ -970,8 +815,6 @@ public partial class MainWindow : Window
     private void ModsNavBtn_Click(object s, RoutedEventArgs e)
     {
         StopConnectionAnalysis();
-        StopGame();
-        StopEditorRecording();
         ShowModsPage();
     }
 
@@ -979,7 +822,6 @@ public partial class MainWindow : Window
     {
         StopConnectionAnalysis();
         MainPage.Visibility = Visibility.Collapsed;
-        GamePage.Visibility = Visibility.Collapsed;
         FaqPage.Visibility = Visibility.Collapsed;
         DiagPage.Visibility = Visibility.Collapsed;
         SolutionPage.Visibility = Visibility.Collapsed;
@@ -987,7 +829,6 @@ public partial class MainWindow : Window
 
         ModsNavBtn.Foreground = Brushes.White;
         ServicesBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
-        GameNavBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
         FaqNavBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
         DiagNavBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
 
@@ -1564,7 +1405,7 @@ public partial class MainWindow : Window
     {
         var openDialog = new OpenFileDialog
         {
-            Filter = "NetFix Mod (*.netfix-mod)|*.netfix-mod|All files (*.*)|*.*",
+            Filter = "Мод BypassDPI-WPF (*.netfix-mod)|*.netfix-mod|Все файлы (*.*)|*.*",
             Title = "Выберите файл мода",
         };
 
@@ -1736,12 +1577,12 @@ public partial class MainWindow : Window
         {
             FileName = mod.Name,
             DefaultExt = ".netfix-mod",
-            Filter = "NetFix Mod (*.netfix-mod)|*.netfix-mod|ZIP Archive (*.zip)|*.zip"
+            Filter = "Мод BypassDPI-WPF (*.netfix-mod)|*.netfix-mod|ZIP-архив (*.zip)|*.zip"
         };
 
         if (dlg.ShowDialog() != true) return;
 
-        var dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"NetFix_Export_{Guid.NewGuid()}");
+        var dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"BypassDPI-WPF_Export_{Guid.NewGuid()}");
         Directory.CreateDirectory(dir);
         try
         {
@@ -2377,7 +2218,7 @@ public partial class MainWindow : Window
     {
         var openDialog = new OpenFileDialog
         {
-            Filter = "NetFix Mod (*.netfix-mod)|*.netfix-mod|All files (*.*)|*.*",
+            Filter = "Мод BypassDPI-WPF (*.netfix-mod)|*.netfix-mod|Все файлы (*.*)|*.*",
             Title = "Выберите файл мода",
         };
 
@@ -3287,7 +3128,7 @@ public partial class MainWindow : Window
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("NetFix/1.0");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("BypassDPI-WPF/1.0");
 
             var json = await http.GetStringAsync($"https://api.github.com/repos/{repo}/releases/latest");
             using var doc = JsonDocument.Parse(json);
@@ -3669,13 +3510,13 @@ public partial class MainWindow : Window
             cardContent.Children.Add(titleText);
 
             string connectionStatusText = hasInternet
-                ? $"NetFix не может подключиться к GitHub, чтобы скачать {componentName} напрямую. Это может быть временная блокировка или проблемы с сетью (хотя интернет на другие ресурсы есть).\n\n"
+                ? $"BypassDPI-WPF не может подключиться к GitHub, чтобы скачать {componentName} напрямую. Это может быть временная блокировка или проблемы с сетью (хотя интернет на другие ресурсы есть).\n\n"
                 : $"Отсутствует подключение к интернету. Проверьте ваше сетевое подключение.\n\n";
 
             TextBlock descText = new TextBlock
             {
                 Text = connectionStatusText +
-                       $"Можно установить резервную копию — она хранится внутри NetFix и работает так же, но может быть не самой последней версии (актуальна на {date}, версия {version}).\n\n" +
+                       $"Можно установить резервную копию — она хранится внутри BypassDPI-WPF и работает так же, но может быть не самой последней версии (актуальна на {date}, версия {version}).\n\n" +
                        "Установить резервную копию?",
                 FontSize = 14,
                 Foreground = new SolidColorBrush(Color.FromRgb(0xcc, 0xcc, 0xcc)),
@@ -4155,8 +3996,7 @@ public partial class MainWindow : Window
         {
             Text = "Приложение не обнаружило рабочие конфиги!\n\n" +
                    "Для работы приложения необходимо просканировать конфиги. " +
-                   "Выделите примерно 10 минут, во время проверки вы можете поиграть " +
-                   "в мини-игру или заняться своими делами.\n\n" +
+                   "Выделите примерно 10 минут, во время проверки вы можете заняться своими делами.\n\n" +
                    "После сканирования у вас будет полный функционал приложения!",
             FontSize = 14,
             Foreground = new SolidColorBrush(Color.FromRgb(0xcc, 0xcc, 0xcc)),
@@ -4303,8 +4143,6 @@ public partial class MainWindow : Window
 
     private void DiagNavBtn_Click(object s, RoutedEventArgs e)
     {
-        StopGame();
-        StopEditorRecording();
 
         ShowDiagnosticsTab();
     }
@@ -4312,7 +4150,6 @@ public partial class MainWindow : Window
     public void ShowDiagnosticsTab()
     {
         MainPage.Visibility = Visibility.Collapsed;
-        GamePage.Visibility = Visibility.Collapsed;
         FaqPage.Visibility = Visibility.Collapsed;
         SolutionPage.Visibility = Visibility.Collapsed;
         ModsPage.Visibility = Visibility.Collapsed;
@@ -4323,165 +4160,23 @@ public partial class MainWindow : Window
         DiagAvailabilityScreen.Visibility = Visibility.Collapsed;
 
         DiagNavBtn.Foreground = Brushes.White;
-        GameNavBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
         FaqNavBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
         ModsNavBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
     }
 
-    private void GameNavBtn_Click(object s, RoutedEventArgs e)
-    {
-        if (GamePage.Visibility == Visibility.Visible)
-        {
-            if (GameEditorView.Visibility == Visibility.Visible)
-            {
-                StopEditorRecording();
-                ShowGameView(GameMenuView);
-                return;
-            }
 
-            if (GameTrackSelectView.Visibility == Visibility.Visible)
-            {
-                ShowGameView(GameMenuView);
-                return;
-            }
-
-            if (GamePlayView.Visibility == Visibility.Visible)
-            {
-                StopGame();
-                ShowGameView(GameTrackSelectView);
-                return;
-            }
-
-            return;
-        }
-
-        StopGame();
-        StopEditorRecording();
-
-        MainPage.Visibility = Visibility.Collapsed;
-        FaqPage.Visibility = Visibility.Collapsed;
-        DiagPage.Visibility = Visibility.Collapsed;
-        SolutionPage.Visibility = Visibility.Collapsed;
-        ModsPage.Visibility = Visibility.Collapsed;
-        GamePage.Visibility = Visibility.Visible;
-
-        GameNavBtn.Foreground = Brushes.White;
-        ServicesBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
-        FaqNavBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
-        DiagNavBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
-        ModsNavBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
-
-        ShowGameView(GameMenuView);
-        LoadUserLevels();
-    }
-
-    private void GameBackBtn_Click(object s, RoutedEventArgs e)
-    {
-        _previewPlayer.Stop();
-        _previewPlaying = false;
-
-        if (OszDifficultyView.Visibility == Visibility.Visible)
-        {
-            ShowGameView(GameMenuView);
-            _pendingOszPath = null;
-            return;
-        }
-
-        if (GameStatsDetailView.Visibility == Visibility.Visible)
-        {
-            GameStatsDetailView.Visibility = Visibility.Collapsed;
-            GameStatsView.Visibility = Visibility.Visible;
-            GameStatsView.Focus();
-            return;
-        }
-        if (GameStatsView.Visibility == Visibility.Visible)
-        {
-            GameStatsView.Visibility = Visibility.Collapsed;
-            GameMenuView.Visibility = Visibility.Visible;
-            return;
-        }
-
-        if (GameSettingsView.Visibility == Visibility.Visible)
-        {
-            GameSettingsView.Visibility = Visibility.Collapsed;
-            GameMenuView.Visibility = Visibility.Visible;
-            _listeningLane = -1;
-            return;
-        }
-
-        if (_gameOverlayActive)
-        {
-            _gameOverlayActive = false;
-            StopGame();
-            GamePage.Visibility = Visibility.Collapsed;
-            Panel.SetZIndex(GamePage, 0);
-            GamePage.Opacity = 1;
-            GamePage.Background = new SolidColorBrush(Color.FromRgb(0x0a, 0x0a, 0x0f));
-
-            MainPage.Effect = null;
-            MainPage.Opacity = 1.0;
-
-            ServicesBtn.IsEnabled = true;
-            GameNavBtn.IsEnabled = true;
-            FaqNavBtn.IsEnabled = true;
-            DiagNavBtn.IsEnabled = true;
-            SettingsBtn.IsEnabled = true;
-            ModsNavBtn.IsEnabled = true;
-
-            EditorMenuBtn.Visibility = Visibility.Visible;
-            return;
-        }
-
-        if (GameEditorView.Visibility == Visibility.Visible)
-        {
-            StopEditorRecording();
-            ShowGameView(GameMenuView);
-            return;
-        }
-
-        if (GameTrackSelectView.Visibility == Visibility.Visible)
-        {
-            ShowGameView(GameMenuView);
-            return;
-        }
-
-        if (OsuModeView.Visibility == Visibility.Visible)
-        {
-            ShowGameView(GameTrackSelectView);
-            return;
-        }
-
-        if (GamePlayView.Visibility == Visibility.Visible)
-        {
-            StopGame();
-            ShowGameView(GameTrackSelectView);
-            return;
-        }
-
-        if (GameMenuView.Visibility == Visibility.Visible)
-        {
-            GamePage.Visibility = Visibility.Collapsed;
-            MainPage.Visibility = Visibility.Visible;
-            GameNavBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
-            return;
-        }
-    }
 
     private string _currentFaqCategory = "";
 
     private void FaqNavBtn_Click(object s, RoutedEventArgs e)
     {
-        StopGame();
-        StopEditorRecording();
 
         MainPage.Visibility = Visibility.Collapsed;
-        GamePage.Visibility = Visibility.Collapsed;
         DiagPage.Visibility = Visibility.Collapsed;
         SolutionPage.Visibility = Visibility.Collapsed;
         ModsPage.Visibility = Visibility.Collapsed;
         FaqPage.Visibility = Visibility.Visible;
         FaqNavBtn.Foreground = Brushes.White;
-        GameNavBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
         DiagNavBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
         ModsNavBtn.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
         ShowFaqCategories();
@@ -4510,7 +4205,6 @@ public partial class MainWindow : Window
         AddCategoryCard("Discord", "Обновление и голосовые каналы", "DiscordIcon", Color.FromRgb(0x8b, 0x5c, 0xf6));
         AddCategoryCard("Общее", "YouTube, Zapret и сетевые ошибки", "SettingsIcon", Color.FromRgb(0x22, 0xc5, 0x5e));
 
-        AddAndroidCard();
 
         var helpCard = new Border {
             Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x1e, 0x1e)),
@@ -4560,11 +4254,11 @@ public partial class MainWindow : Window
         ));
 
         helpStack.Children.Add(CreateFaqSupportCard(
-            title: "Создать обращение в репозитории NetFix",
-            desc: "Опишите найденный баг или сбой в разделе Issues на моём GitHub. Прикрепите скриншот или текст ошибки - это поможет быстрее исправить проблему в коде программы, а решение сохранится для других пользователей.",
+            title: "Сообщить об ошибке форка",
+            desc: "Опишите найденный баг или сбой в разделе Issues форка. Прикрепите скриншот или текст ошибки.",
             iconGeometry: ghIconGeom,
             accentColor: Color.FromRgb(0xa8, 0x55, 0xf7),
-            onClick: () => OpenUrl("https://github.com/rupleide/NetFix/issues")
+            onClick: () => OpenUrl("https://github.com/vitaliyDrovosek/BypassDPI-WPF/issues")
         ));
 
         helpStack.Children.Add(CreateFaqSupportCard(
@@ -4826,304 +4520,6 @@ public partial class MainWindow : Window
 
         btn.Click += (s, e) => ShowFaqQuestions(title);
         FaqContainer.Children.Add(btn);
-    }
-
-    private void AddAndroidCard()
-    {
-        var btn = new Button {
-            Style = (Style)FindResource("FlatBtn"),
-            Padding = new Thickness(0),
-            Height = double.NaN,
-            HorizontalContentAlignment = System.Windows.HorizontalAlignment.Stretch,
-            VerticalContentAlignment = VerticalAlignment.Stretch,
-            Margin = new Thickness(0, 12, 0, 0)
-        };
-
-        var card = new Border {
-            Background = new SolidColorBrush(Color.FromRgb(0x1a, 0x2e, 0x1a)),
-            CornerRadius = new CornerRadius(0, 12, 12, 0),
-            Padding = new Thickness(20, 18, 20, 18),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x22, 0xc5, 0x5e)),
-            BorderThickness = new Thickness(4, 0, 0, 0)
-        };
-
-        var stack = new StackPanel();
-
-        var headerStack = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
-
-        var badge = new Border
-        {
-            Background = new SolidColorBrush(Color.FromRgb(0x22, 0xc5, 0x5e)) { Opacity = 0.2 },
-            CornerRadius = new CornerRadius(4),
-            Padding = new Thickness(8, 3, 8, 3)
-        };
-
-        var badgeContent = new StackPanel { Orientation = Orientation.Horizontal };
-
-        var fireIcon = new System.Windows.Shapes.Path
-        {
-            Data = Geometry.Parse("M187.899,164.809 C185.803,214.868 144.574,254.812 94.000,254.812 C42.085,254.812 -0.000,211.312 -0.000,160.812 C-0.000,154.062 -0.121,140.572 10.000,117.812 C16.057,104.191 19.856,95.634 22.000,87.812 C23.178,83.513 25.469,76.683 32.000,87.812 C35.851,94.374 36.000,103.812 36.000,103.812 C36.000,103.812 50.328,92.817 60.000,71.812 C74.179,41.019 62.866,22.612 59.000,9.812 C57.662,5.384 56.822,-2.574 66.000,0.812 C75.352,4.263 100.076,21.570 113.000,39.812 C131.445,65.847 138.000,90.812 138.000,90.812 C138.000,90.812 143.906,83.482 146.000,75.812 C148.365,67.151 148.400,58.573 155.999,67.813 C163.226,76.600 173.959,93.113 180.000,108.812 C190.969,137.321 187.899,164.809 187.899,164.809 Z M94.000,254.812 C58.101,254.812 29.000,225.711 29.000,189.812 C29.000,168.151 37.729,155.000 55.896,137.166 C67.528,125.747 78.415,111.722 83.042,102.172 C83.953,100.292 86.026,90.495 94.019,101.966 C98.212,107.982 104.785,118.681 109.000,127.812 C116.266,143.555 118.000,158.812 118.000,158.812 C118.000,158.812 125.121,154.616 130.000,143.812 C131.573,140.330 134.753,127.148 143.643,140.328 C150.166,150.000 159.127,167.390 159.000,189.812 C159.000,225.711 129.898,254.812 94.000,254.812 Z M95.000,183.812 C104.250,183.812 104.250,200.941 116.000,223.812 C123.824,239.041 112.121,254.812 95.000,254.812 C77.879,254.812 69.000,240.933 69.000,223.812 C69.000,206.692 85.750,183.812 95.000,183.812 Z"),
-            Fill = new SolidColorBrush(Color.FromRgb(0x22, 0xc5, 0x5e)),
-            Width = 10,
-            Height = 10,
-            Stretch = Stretch.Uniform,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 4, 0)
-        };
-        badgeContent.Children.Add(fireIcon);
-
-        badgeContent.Children.Add(new TextBlock {
-            Text = "НОВИНКА",
-            FontSize = 11,
-            FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x22, 0xc5, 0x5e)),
-            VerticalAlignment = VerticalAlignment.Center
-        });
-
-        badge.Child = badgeContent;
-        headerStack.Children.Add(badge);
-        stack.Children.Add(headerStack);
-
-        stack.Children.Add(new TextBlock {
-            Text = "NetFix Mobile уже вышел!",
-            FontSize = 18,
-            FontWeight = FontWeights.Bold,
-            Foreground = Brushes.White,
-            Margin = new Thickness(0, 0, 0, 6)
-        });
-
-        stack.Children.Add(new TextBlock {
-            Text = "YouTube и Telegram на смартфонах и Smart TV в один клик",
-            FontSize = 14,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xaa, 0xdd, 0xaa)),
-            Margin = new Thickness(0, 0, 0, 12)
-        });
-
-        var arrowText = new TextBlock {
-            Text = "Узнать подробнее и скачать →",
-            FontSize = 13,
-            FontWeight = FontWeights.Medium,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x22, 0xc5, 0x5e))
-        };
-        stack.Children.Add(arrowText);
-
-        card.Child = stack;
-        btn.Content = card;
-
-        btn.MouseEnter += (s, e) => {
-            var borderElement = (Border)btn.Content;
-            borderElement.Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x36, 0x1e));
-        };
-        btn.MouseLeave += (s, e) => {
-            var borderElement = (Border)btn.Content;
-            borderElement.Background = new SolidColorBrush(Color.FromRgb(0x1a, 0x2e, 0x1a));
-        };
-
-        btn.Click += (s, e) => ShowAndroidInfo();
-        FaqContainer.Children.Add(btn);
-    }
-
-    private void ShowAndroidInfo()
-    {
-        FaqHeaderTitle.Text = "NetFix Mobile";
-        FaqContainer.Children.Clear();
-
-        var mainCard = new Border {
-            Background = new SolidColorBrush(Color.FromRgb(0x1c, 0x1c, 0x1c)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x22, 0xc5, 0x5e)),
-            BorderThickness = new Thickness(0, 3, 0, 0),
-            CornerRadius = new CornerRadius(12),
-            Padding = new Thickness(24),
-            SnapsToDevicePixels = true,
-            UseLayoutRounding = true
-        };
-        TextOptions.SetTextFormattingMode(mainCard, TextFormattingMode.Ideal);
-        TextOptions.SetTextRenderingMode(mainCard, TextRenderingMode.Grayscale);
-
-        var stack = new StackPanel();
-
-        stack.Children.Add(new TextBlock {
-            Text = "NetFix Mobile для Android & Smart TV",
-            FontSize = 20,
-            FontWeight = FontWeights.Bold,
-            Foreground = Brushes.White,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 6)
-        });
-
-        stack.Children.Add(new TextBlock {
-            Text = "Одна кнопка, и интернет снова работает. Прокси Телеграм (Proxy Telegram) и обход блокировок на телефоне и телевизоре.",
-            FontSize = 14,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x4a, 0xde, 0x80)),
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 18)
-        });
-
-        try
-        {
-            BitmapImage? bmp = null;
-            try
-            {
-                bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.UriSource = new Uri("pack://application:,,,/Assets/Screenshots/hd_phototv.png", UriKind.Absolute);
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.EndInit();
-                bmp.Freeze();
-            }
-            catch
-            {
-                bmp = null;
-            }
-
-            if (bmp == null)
-            {
-                string[] candidatePaths = [
-                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Screenshots", "hd_phototv.png"),
-                    Path.GetFullPath("Assets/Screenshots/hd_phototv.png"),
-                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "Assets", "Screenshots", "hd_phototv.png")
-                ];
-                foreach (var path in candidatePaths)
-                {
-                    if (File.Exists(path))
-                    {
-                        try
-                        {
-                            var diskBmp = new BitmapImage();
-                            diskBmp.BeginInit();
-                            diskBmp.UriSource = new Uri(path, UriKind.Absolute);
-                            diskBmp.CacheOption = BitmapCacheOption.OnLoad;
-                            diskBmp.EndInit();
-                            diskBmp.Freeze();
-                            bmp = diskBmp;
-                            break;
-                        }
-                        catch { }
-                    }
-                }
-            }
-
-            if (bmp != null)
-            {
-                var imgBorder = new Border
-                {
-                    CornerRadius = new CornerRadius(10),
-                    ClipToBounds = true,
-                    Margin = new Thickness(0, 0, 0, 20),
-                    Background = new SolidColorBrush(Color.FromRgb(0x10, 0x10, 0x12)),
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(0x2a, 0x2a, 0x2e)),
-                    BorderThickness = new Thickness(1),
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center
-                };
-                var img = new System.Windows.Controls.Image
-                {
-                    Source = bmp,
-                    Stretch = Stretch.Uniform,
-                    MaxHeight = 360
-                };
-                RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
-                imgBorder.Child = img;
-                stack.Children.Add(imgBorder);
-            }
-        }
-        catch { }
-
-        var aboutTitle = new TextBlock {
-            Text = "💡 О проекте",
-            FontSize = 16,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = Brushes.White,
-            Margin = new Thickness(0, 0, 0, 8)
-        };
-        stack.Children.Add(aboutTitle);
-
-        var infoText = "Блокировки давно перестали быть проблемой одного только компьютера. YouTube тормозит на телевизоре, Telegram не грузит фото и видео на телефоне в мобильной сети, и если на десктопе с этим уже давно разобрался NetFix, то на Android до сих пор приходилось вручную возиться со сложными утилитами и настройками.\n\n" +
-            "NetFix Mobile - официальный мобильный клиент, созданный по принципу «одной кнопки». Внутри одного APK работает обход DPI и встроенный локальный TgWsProxy Android (прокси Телеграм / Proxy Telegram), работающие как два независимых сервиса. Приложение само тестирует сеть, подбирает рабочую конфигурацию под вашего провайдера и запускает всё в один клик, без танцев с бубном и настроек.\n\n" +
-            "От автора: Мобильная версия переносит философию «просто нажми кнопку» на Android - и на телефоны, и на телевизоры. Интерфейс одинаково удобно управляется как пальцем на сенсорном экране, так и обычным пультом от Smart TV.";
-
-        stack.Children.Add(new TextBlock {
-            Text = infoText,
-            FontSize = 14,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xdd, 0xdd, 0xdd)),
-            TextWrapping = TextWrapping.Wrap,
-            LineHeight = 22,
-            Margin = new Thickness(0, 0, 0, 18)
-        });
-
-        var ghBtn = new Button {
-            Style = (Style)FindResource("GreenAccentBtn"),
-            Padding = new Thickness(20, 10, 20, 10),
-            Margin = new Thickness(0, 0, 0, 20),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
-            Cursor = Cursors.Hand
-        };
-        ghBtn.Content = "🚀 Скачать на GitHub (APK)";
-        ghBtn.Click += (_, _) => OpenUrl("https://github.com/rupleide/NetFixMobile/releases/latest");
-        stack.Children.Add(ghBtn);
-
-        var reqBorder = new Border {
-            Background = new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x18)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x2e, 0x2e, 0x32)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(16, 14, 16, 14)
-        };
-
-        var reqText = "📋 Системные требования:\n" +
-            "• ОС: Android 8.0 (API 26) и новее\n" +
-            "• Архитектуры: arm64-v8a, armeabi-v7a, x86, x86_64\n" +
-            "• Совместимость: Смартфоны, планшеты, ТВ-приставки и телевизоры на Android TV / Google TV\n" +
-            "• Разрешения: При первом запуске система попросит подтвердить создание VPN-туннеля (стандартный диалог Android для работы обхода DPI).";
-
-        reqBorder.Child = new TextBlock {
-            Text = reqText,
-            FontSize = 13,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xaa, 0xaa, 0xaa)),
-            TextWrapping = TextWrapping.Wrap,
-            LineHeight = 20
-        };
-        stack.Children.Add(reqBorder);
-
-        mainCard.Child = stack;
-        FaqContainer.Children.Add(mainCard);
-
-        var btnContainer = new Button {
-            Style = (Style)FindResource("FlatBtn"),
-            Padding = new Thickness(0),
-            Height = double.NaN,
-            HorizontalContentAlignment = System.Windows.HorizontalAlignment.Stretch,
-            VerticalContentAlignment = VerticalAlignment.Stretch,
-            Margin = new Thickness(0, 24, 0, 0)
-        };
-
-        var backBtn = new Border {
-            CornerRadius = new CornerRadius(20),
-            Background = new SolidColorBrush(Color.FromRgb(0x1a, 0x33, 0x56)),
-            Padding = new Thickness(20, 10, 20, 10),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center
-        };
-
-        backBtn.Child = new TextBlock {
-            Text = "← Вернуться к FAQ",
-            Foreground = new SolidColorBrush(Color.FromRgb(0x3b, 0x82, 0xf6)),
-            FontSize = 14,
-            FontWeight = FontWeights.Medium,
-            IsHitTestVisible = false
-        };
-
-        btnContainer.Content = backBtn;
-
-        btnContainer.MouseEnter += (s, e) => {
-            var border = (Border)btnContainer.Content;
-            border.Background = new SolidColorBrush(Color.FromRgb(0x1f, 0x3d, 0x66));
-        };
-        btnContainer.MouseLeave += (s, e) => {
-            var border = (Border)btnContainer.Content;
-            border.Background = new SolidColorBrush(Color.FromRgb(0x1a, 0x33, 0x56));
-        };
-
-        btnContainer.Click += (s, e) => ShowFaqCategories();
-        FaqContainer.Children.Add(btnContainer);
     }
 
     private void ShowFaqQuestions(string category)
@@ -5508,7 +4904,7 @@ public partial class MainWindow : Window
                     NetLbl.Foreground = redBrush;
                 }
 
-                if (!_isInGame && !_discord.IsScanning)
+                if (!_discord.IsScanning)
                     _discord.SetAllGood(st.ZapretRunning, st.TgWsProxyRunning);
 
                 bool allEnabledRunning =
@@ -5603,11 +4999,11 @@ public partial class MainWindow : Window
                           "Добрый вечер";
 
         await Task.Delay(d);
-        AppendLog($"{greeting}! Добро пожаловать в NetFix 🚀", "final");
+        AppendLog($"{greeting}! Добро пожаловать в BypassDPI-WPF 🚀", "final");
         await Task.Delay(d);
         AppendLog("Инициализация компонентов системы...", "info");
         await Task.Delay(d);
-        AppendLink("Мой Telegram-канал: ", "t.me/NetFixRuBi", " - информация об обновлениях, новые способы обходов и гайды. Максимально полезная информация, советую подписаться", "https://t.me/NetFixRuBi");
+        AppendLog("Неофициальный форк (fork of NetFix by rupleide). Исходники: github.com/vitaliyDrovosek/BypassDPI-WPF", "info");
         await Task.Delay(d);
         AppendLog("spacer");
 
@@ -5799,210 +5195,6 @@ public partial class MainWindow : Window
 
     private void ClearLog_Click(object s, RoutedEventArgs e) => LogBox.Document.Blocks.Clear();
 
-    private void ShowPlayWhileScanDialog()
-    {
-        if (!_settings.ShowGameOfferDialog) return;
-
-        var overlay = new Border
-        {
-            Background = new SolidColorBrush(Color.FromArgb(160, 0, 0, 0)),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
-            VerticalAlignment = System.Windows.VerticalAlignment.Stretch
-        };
-        Grid.SetRowSpan(overlay, 3);
-        MainGrid.Children.Add(overlay);
-
-        var dialogCard = new Border
-        {
-            Background = new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x18)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xf1)),
-            BorderThickness = new Thickness(0, 3, 0, 0),
-            CornerRadius = new CornerRadius(14),
-            MaxWidth = 400,
-            Margin = new Thickness(40),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-            VerticalAlignment = System.Windows.VerticalAlignment.Center,
-            Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                Color = Colors.Black,
-                BlurRadius = 30,
-                ShadowDepth = 0,
-                Opacity = 0.6
-            }
-        };
-        Grid.SetRowSpan(dialogCard, 3);
-
-        var content = new StackPanel { Margin = new Thickness(28, 24, 28, 24) };
-
-        var iconBorder = new Border
-        {
-            Width = 52,
-            Height = 52,
-            CornerRadius = new CornerRadius(26),
-            Background = new SolidColorBrush(Color.FromArgb(30, 0x63, 0x66, 0xf1)),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 16)
-        };
-
-        var iconViewbox = new Viewbox { Width = 28, Height = 28 };
-        var iconCanvas = new Canvas { Width = 512, Height = 512 };
-
-        var gamepadPath = new System.Windows.Shapes.Path
-        {
-            Data = Geometry.Parse("M511.27,331.566L511.27,331.566c0-0.009,0-0.018,0-0.026c-0.008-0.052,0-0.087-0.008-0.14h-0.009 c-6.682-88.65-27.159-154.403-55.948-198.846c-14.412-22.221-30.968-39.115-49.041-50.507 c-18.048-11.401-37.649-17.198-57.388-17.18c-14.551-0.009-26.985,2.629-37.527,6.611c-15.836,5.97-27.358,14.795-36.364,21.319 c-4.495,3.28-8.373,5.961-11.549,7.592c-3.211,1.658-5.475,2.239-7.436,2.239c-1.328-0.009-2.725-0.251-4.521-0.92 c-3.115-1.137-7.288-3.732-12.278-7.332c-7.531-5.354-16.885-12.764-29.223-18.846c-12.339-6.092-27.766-10.69-46.855-10.664 c-19.739-0.018-39.34,5.787-57.388,17.18c-27.115,17.119-50.794,46.481-69.008,87.887C18.542,211.332,5.743,264.92,0.746,331.401 H0.738c-0.009,0.052,0,0.096-0.009,0.14c0,0.008,0,0.017,0,0.026l0,0C0.243,336.981,0,342.247,0,347.358 c-0.009,25.058,5.77,46.455,16.651,63.141c10.846,16.694,26.863,28.347,45.614,33.822c6.43,1.892,13.068,2.811,19.757,2.811 c19.445-0.026,39.046-7.618,57.692-20.764c18.681-13.189,36.598-32.052,52.91-55.731c7.845-11.427,18.5-24.798,29.987-34.854 c5.736-5.032,11.662-9.214,17.362-12.026c5.71-2.82,11.09-4.244,16.027-4.235c4.936-0.009,10.317,1.414,16.026,4.235 c8.555,4.199,17.588,11.558,25.787,20.112c8.226,8.538,15.67,18.196,21.562,26.76c16.312,23.688,34.23,42.55,52.902,55.739 c18.655,13.146,38.255,20.738,57.7,20.764c6.69,0,13.328-0.92,19.749-2.811c18.759-5.475,34.776-17.128,45.614-33.822 C506.221,393.813,512,372.416,512,347.358C512,342.256,511.757,336.981,511.27,331.566z M476.737,398.36 c-8.104,12.356-19.236,20.469-33.284,24.651c-4.33,1.275-8.807,1.9-13.475,1.908c-13.484,0.026-28.902-5.414-44.894-16.703 c-15.974-11.254-32.312-28.225-47.418-50.177c-8.564-12.417-20.044-27.012-33.64-38.95c-6.812-5.97-14.169-11.297-22.16-15.245 c-7.975-3.94-16.677-6.534-25.866-6.534c-9.189,0-17.892,2.594-25.866,6.534c-11.974,5.943-22.577,14.906-31.957,24.616 c-9.353,9.726-17.432,20.268-23.843,29.579c-15.106,21.952-31.454,38.923-47.419,50.177 c-15.991,11.288-31.418,16.729-44.894,16.703c-4.677-0.009-9.145-0.633-13.484-1.908c-14.04-4.182-25.172-12.295-33.284-24.651 c-8.06-12.364-13.04-29.293-13.04-51.002c0-4.451,0.208-9.111,0.65-13.961v-0.052l0.009-0.113 c6.429-86.17,26.446-148.582,52.451-188.59c12.989-20.026,27.41-34.447,42.256-43.801c14.872-9.353,30.126-13.744,45.544-13.761 c11.896,0.009,21.424,2.091,29.675,5.189c12.356,4.65,21.883,11.756,31.158,18.507c4.652,3.367,9.233,6.655,14.378,9.336 c5.111,2.655,11.028,4.729,17.666,4.729c4.399,0,8.556-0.928,12.286-2.325c6.56-2.482,12-6.213,17.422-10.065 c8.113-5.831,16.208-12.14,26.091-16.981c9.883-4.833,21.449-8.364,37.076-8.39c15.418,0.017,30.672,4.408,45.545,13.761 c22.264,14.005,43.6,39.532,60.511,78.03c16.92,38.464,29.354,89.735,34.195,154.36v0.052l0.009,0.113 c0.434,4.842,0.652,9.502,0.652,13.961C489.778,369.067,484.806,386.004,476.737,398.36z"),
-            Fill = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xf1))
-        };
-        iconCanvas.Children.Add(gamepadPath);
-
-        var dpadPath = new System.Windows.Shapes.Polygon
-        {
-            Points = new PointCollection {
-                new System.Windows.Point(161.232,178.126), new System.Windows.Point(122.29,178.126),
-                new System.Windows.Point(122.29,213.631), new System.Windows.Point(86.785,213.631),
-                new System.Windows.Point(86.785,252.573), new System.Windows.Point(122.29,252.573),
-                new System.Windows.Point(122.29,288.079), new System.Windows.Point(161.232,288.079),
-                new System.Windows.Point(161.232,252.573), new System.Windows.Point(196.737,252.573),
-                new System.Windows.Point(196.737,213.631), new System.Windows.Point(161.232,213.631)
-            },
-            Fill = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xf1))
-        };
-        iconCanvas.Children.Add(dpadPath);
-
-        var button1 = new System.Windows.Shapes.Ellipse { Width = 41.076, Height = 41.076, Fill = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xf1)) };
-        Canvas.SetLeft(button1, 348.139);
-        Canvas.SetTop(button1, 167.002);
-        iconCanvas.Children.Add(button1);
-
-        var button2 = new System.Windows.Shapes.Ellipse { Width = 41.058, Height = 41.068, Fill = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xf1)) };
-        Canvas.SetLeft(button2, 348.139);
-        Canvas.SetTop(button2, 266.247);
-        iconCanvas.Children.Add(button2);
-
-        var button3 = new System.Windows.Shapes.Ellipse { Width = 41.076, Height = 41.059, Fill = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xf1)) };
-        Canvas.SetLeft(button3, 397.744);
-        Canvas.SetTop(button3, 216.633);
-        iconCanvas.Children.Add(button3);
-
-        var button4 = new System.Windows.Shapes.Ellipse { Width = 41.078, Height = 41.059, Fill = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xf1)) };
-        Canvas.SetLeft(button4, 298.516);
-        Canvas.SetTop(button4, 216.633);
-        iconCanvas.Children.Add(button4);
-
-        iconViewbox.Child = iconCanvas;
-        iconBorder.Child = iconViewbox;
-        content.Children.Add(iconBorder);
-
-        content.Children.Add(new TextBlock
-        {
-            Text = "Скучно ждать?",
-            FontSize = 19,
-            FontWeight = FontWeights.Bold,
-            Foreground = Brushes.White,
-            TextAlignment = TextAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 10)
-        });
-
-        content.Children.Add(new TextBlock
-        {
-            Text = "Сканирование займёт время. Хочешь поиграть пока идёт проверка?",
-            FontSize = 13,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xaa, 0xaa, 0xaa)),
-            TextAlignment = TextAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 22)
-        });
-
-        var dontShowAgain = new System.Windows.Controls.CheckBox
-        {
-            Content = "Больше не показывать",
-            Style = (Style)FindResource("Toggle"),
-            Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
-            FontSize = 13,
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 14),
-            IsChecked = !_settings.ShowGameOfferDialog
-        };
-        content.Children.Add(dontShowAgain);
-
-        var btnPanel = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center
-        };
-
-        var yesBtn = new Button
-        {
-            Width = 130,
-            Height = 40,
-            Margin = new Thickness(0, 0, 10, 0),
-            Style = (Style)FindResource("AccentBtn"),
-            Background = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xf1)),
-            Foreground = Brushes.White,
-            FontSize = 13,
-            FontWeight = FontWeights.SemiBold
-        };
-        yesBtn.Content = "Поиграть!";
-        yesBtn.Click += (_, _) =>
-        {
-            if (dontShowAgain.IsChecked == true)
-            {
-                _settings.ShowGameOfferDialog = false;
-                SettingsService.Save(_settings);
-            }
-            ShowGameOfferCB.IsChecked = _settings.ShowGameOfferDialog;
-            MainGrid.Children.Remove(overlay);
-            MainGrid.Children.Remove(dialogCard);
-            ShowGameOverlay();
-        };
-
-        var noBtn = new Button
-        {
-            Width = 90,
-            Height = 40,
-            Style = (Style)FindResource("OutlineBtn"),
-            Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
-            FontSize = 13
-        };
-        noBtn.Content = "Нет";
-        noBtn.Click += (_, _) =>
-        {
-            if (dontShowAgain.IsChecked == true)
-            {
-                _settings.ShowGameOfferDialog = false;
-                SettingsService.Save(_settings);
-            }
-            ShowGameOfferCB.IsChecked = _settings.ShowGameOfferDialog;
-            MainGrid.Children.Remove(overlay);
-            MainGrid.Children.Remove(dialogCard);
-        };
-
-        btnPanel.Children.Add(yesBtn);
-        btnPanel.Children.Add(noBtn);
-        content.Children.Add(btnPanel);
-
-        dialogCard.Child = content;
-        MainGrid.Children.Add(dialogCard);
-
-        overlay.Opacity = 0;
-        dialogCard.Opacity = 0;
-        dialogCard.RenderTransform = new ScaleTransform(0.92, 0.92);
-        dialogCard.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
-
-        overlay.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)));
-        dialogCard.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(240)));
-        ((ScaleTransform)dialogCard.RenderTransform).BeginAnimation(ScaleTransform.ScaleXProperty,
-            new DoubleAnimation(0.92, 1.0, TimeSpan.FromMilliseconds(280))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-        ((ScaleTransform)dialogCard.RenderTransform).BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(0.92, 1.0, TimeSpan.FromMilliseconds(280))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-
-        overlay.MouseLeftButtonDown += (_, _) =>
-        {
-            MainGrid.Children.Remove(overlay);
-            MainGrid.Children.Remove(dialogCard);
-        };
-    }
 
     private void CopyLog_Click(object s, RoutedEventArgs e)
     {
@@ -6013,11 +5205,26 @@ public partial class MainWindow : Window
         }
     }
 
+    private void FixBtn_Toggle_Click(object s, RoutedEventArgs e)
+    {
+        if (_checkInProgress || _autoFixRunning || _isInstalling)
+            return;
+
+        if (!_isConnected)
+        {
+            FixBtn_Click(s, e);
+            return;
+        }
+
+        StopAllBypassServices();
+        SetFixBtnDisconnected();
+        AppendLog("Все службы остановлены", "info");
+    }
+
     private async void FixBtn_Click(object s, RoutedEventArgs e)
     {
         if (_checkInProgress || _autoFixRunning || _isInstalling) return;
 
-        ShowPlayWhileScanDialog();
 
         if (!_settings.EnableZapret && !_settings.EnableTgWsProxy)
         {
@@ -6578,7 +5785,7 @@ public partial class MainWindow : Window
         _isConnected = true;
         _connectedSince = DateTime.Now;
 
-        AnimateButtonLabel("Подключено", "00:00");
+        AnimateButtonLabel("Остановить", "00:00");
 
         _connectedTimer?.Stop();
         _connectedTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -8682,9 +7889,9 @@ public partial class MainWindow : Window
                 row.Children.Add(hostText);
                 row.Children.Add(ipText);
 
-                if (h.IsNetFixManaged)
+                if (h.IsForkManaged)
                 {
-                    var tag = CreateBadge("NetFix", Color.FromRgb(0x33, 0x28, 0x10), Color.FromRgb(0xfd, 0xe0, 0x47));
+                    var tag = CreateBadge("BypassDPI-WPF", Color.FromRgb(0x33, 0x28, 0x10), Color.FromRgb(0xfd, 0xe0, 0x47));
                     Grid.SetColumn(tag, 2);
                     row.Children.Add(tag);
                 }
@@ -9147,7 +8354,7 @@ public partial class MainWindow : Window
 
         sp.Children.Add(new TextBlock
         {
-            Text = "В NetFix нет встроенного VPN.\n\nЭтот статус лишь показывает, что соединение идёт через сторонний VPN-клиент на вашем ПК (например Happ, Amnezia, WireGuard и др.).\n\nЕсли отключить сторонний VPN, маршрут сменится на «Прямой» (с защитой Zapret).",
+            Text = "В BypassDPI-WPF нет встроенного VPN.\n\nЭтот статус лишь показывает, что соединение идёт через сторонний VPN-клиент на вашем ПК (например Happ, Amnezia, WireGuard и др.).\n\nЕсли отключить сторонний VPN, маршрут сменится на «Прямой» (с защитой Zapret).",
             FontFamily = new FontFamily("Segoe UI"),
             FontSize = 11.5,
             Foreground = new SolidColorBrush(Color.FromRgb(0xd4, 0xd4, 0xd8)),
@@ -9522,28 +8729,18 @@ public partial class MainWindow : Window
         StartMinimizedCB.IsEnabled = AutoAppCB.IsChecked == true;
         _settings.TgWsProxyCheckUpdates = TgWsProxySettingsService.GetCheckUpdates();
         TgWsCheckUpdatesCB.IsChecked    = _settings.TgWsProxyCheckUpdates;
-        DiscordRpcCB.IsChecked      = _settings.DiscordRpcEnabled;
         AutoUpdatesCB.IsChecked     = _settings.AutoUpdates;
         UseZapretCB.IsChecked = _settings.EnableZapret;
         UseTgWsCB.IsChecked = _settings.EnableTgWsProxy;
         AutoEacBypassCB.IsChecked = _settings.AutoEacBypass;
-        ShowGameOfferCB.IsChecked   = _settings.ShowGameOfferDialog;
         ShowServiceReminderCB.IsChecked = _settings.ShowLongCheckDialog;
         UpdateFixModeVisual(_settings.Mode);
-        ComboEffectCB.IsChecked = _settings.DisableComboEffect;
-        VolumeSlider.Value = _settings.GameVolume;
-        double linear = Math.Pow(_settings.GameVolume, 3);
-        _editorPlayer.Volume = linear;
-        _previewPlayer.Volume = linear;
-        if (VolumePercent != null)
-            VolumePercent.Text = $"{(int)(_settings.GameVolume * 100)}%";
         RememberSizeCB.IsChecked = _settings.RememberWindowSize;
         ForceNetOkCB.IsChecked = _settings.ForceNetworkOk;
         AdvancedSettingsCB.IsChecked = _settings.ShowAdvancedSettings;
         AdvancedSettingsPanel.Visibility = _settings.ShowAdvancedSettings ? Visibility.Visible : Visibility.Collapsed;
         AlwaysGrayscaleIconsCB.IsChecked = _settings.AlwaysGrayscaleServiceIcons;
         QuickDnsTrayCB.IsChecked = _settings.QuickDnsInTray;
-        LoadKeyLabels();
         _settingsLoaded = true;
     }
 
@@ -9555,7 +8752,6 @@ public partial class MainWindow : Window
         _settings.AutostartApp     = AutoAppCB.IsChecked == true;
         _settings.StartMinimizedToTray = StartMinimizedCB.IsChecked == true;
         _settings.AutoUpdates      = AutoUpdatesCB.IsChecked == true;
-        _settings.ShowGameOfferDialog  = ShowGameOfferCB.IsChecked == true;
         _settings.ShowLongCheckDialog  = ShowServiceReminderCB.IsChecked == true;
         _settings.EnableZapret = UseZapretCB.IsChecked == true;
         _settings.EnableTgWsProxy = UseTgWsCB.IsChecked == true;
@@ -9595,7 +8791,7 @@ public partial class MainWindow : Window
     {
         ShowNotification("Обход античитов (EAC / BattlEye)",
             "При запуске игр вроде Rust или Apex античит намертво закрывает Zapret. Сама игра при этом запускается, но Discord и YouTube перестают работать.\n\n" +
-            "Включите эту функцию, и NetFix сделает всё за вас: автоматически перезапустит Zapret сразу после старта игры, и вы сможете пользоваться Discord как обычно.\n\n" +
+            "Включите эту функцию, и BypassDPI-WPF сделает всё за вас: автоматически перезапустит Zapret сразу после старта игры, и вы сможете пользоваться Discord как обычно.\n\n" +
             "⚠️ Внимание: античиты следят за любыми сетевыми драйверами в системе. Если вы переживаете за свой аккаунт, включайте эту функцию на свой страх и риск!",
             "#3b82f6");
     }
@@ -9759,67 +8955,8 @@ public partial class MainWindow : Window
         SettingsService.Save(_settings);
     }
 
-    private void DiscordRpcCB_Checked(object sender, RoutedEventArgs e)
-    {
-        _settings.DiscordRpcEnabled = true;
-        _discord.Enable();
-        SettingsService.Save(_settings);
-    }
 
-    private void DiscordRpcCB_Unchecked(object sender, RoutedEventArgs e)
-    {
-        if (!_settingsLoaded)
-            return;
 
-        _settings.DiscordRpcEnabled = false;
-        _discord.Disable();
-        SettingsService.Save(_settings);
-    }
-
-    private void ComboEffectCB_Checked(object sender, RoutedEventArgs e)
-    {
-        if (!_settingsLoaded) return;
-        ShowConfirmDialog(
-            "Отключить комбо-эффект?",
-            "Этот эффект создаёт яркую вспышку при одновременном нажатии трёх любых дорожек, " +
-            "он усиливает эмоциональную отдачу от прохождения и делает игру более зрелищной.\n\n" +
-            "Однако на очень сложных уровнях с высокой плотностью нот визуальный шум может " +
-            "сбивать концентрацию. В таком случае отключение оправдано.",
-            ok =>
-            {
-                if (ok)
-                {
-                    _settings.DisableComboEffect = true;
-                    SettingsService.Save(_settings);
-                }
-                else
-                {
-                    ComboEffectCB.IsChecked = false;
-                }
-            },
-            confirmText: "Отключить",
-            confirmIsDestructive: true);
-    }
-
-    private void ComboEffectCB_Unchecked(object sender, RoutedEventArgs e)
-    {
-        if (!_settingsLoaded) return;
-        _settings.DisableComboEffect = false;
-        SettingsService.Save(_settings);
-    }
-
-    private void VolumeSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (!_settingsLoaded) return;
-
-        double linear = Math.Pow(e.NewValue, 3);
-        _editorPlayer.Volume = linear;
-        _previewPlayer.Volume = linear;
-        _settings.GameVolume = e.NewValue;
-        if (VolumePercent != null)
-            VolumePercent.Text = $"{(int)(e.NewValue * 100)}%";
-        SettingsService.Save(_settings);
-    }
 
 
 
@@ -9885,7 +9022,7 @@ public partial class MainWindow : Window
             {
                 var cacheFile = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "NetFix", "zapret_configs.json");
+                    "BypassDPI-WPF", "zapret_configs.json");
 
                 if (!File.Exists(cacheFile))
                 {
@@ -9944,7 +9081,7 @@ public partial class MainWindow : Window
 
                 var cacheFile = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "NetFix", "zapret_configs.json");
+                    "BypassDPI-WPF", "zapret_configs.json");
 
                 var cacheDir = Path.GetDirectoryName(cacheFile);
                 if (!string.IsNullOrEmpty(cacheDir) && !Directory.Exists(cacheDir))
@@ -10118,32 +9255,12 @@ public partial class MainWindow : Window
         _currentNotificationCard = card;
     }
 
-    private void DonateBtn_Click(object s, RoutedEventArgs e)
-    {
-        var w = new DonateWindow { Owner = this };
-        w.ShowDialog();
-    }
-
-    private void SupportBtn_Click(object s, RoutedEventArgs e) =>
-        OpenUrl("https://t.me/sofirka_hanabi");
     private void LinkZapret_Click(object s, RoutedEventArgs e) =>
         OpenUrl("https://github.com/Flowseal/zapret-discord-youtube");
     private void LinkTgWs_Click(object s, RoutedEventArgs e) =>
         OpenUrl("https://github.com/Flowseal/tg-ws-proxy");
     private void LinkNetFix_Click(object s, RoutedEventArgs e) =>
         OpenUrl("https://github.com/rupleide/NetFix");
-    private void LinkNetFixMobile_Click(object s, RoutedEventArgs e) =>
-        OpenUrl("https://github.com/rupleide/NetFixMobile");
-
-    private void OpenTelegramChannel_Click(object s, RoutedEventArgs e)
-    {
-        try {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo {
-                FileName = "https://t.me/NetFixRuBi",
-                UseShellExecute = true
-            });
-        } catch { }
-    }
 
     private void CheckUpdateBtn_Click(object sender, RoutedEventArgs e)
     {
@@ -10152,355 +9269,24 @@ public partial class MainWindow : Window
         window.ShowDialog();
     }
 
-    private void PlayMenuBtn_Click(object s, MouseButtonEventArgs e)
-    {
-        ServicesBtn.IsEnabled = false;
-        GameNavBtn.IsEnabled = false;
-        FaqNavBtn.IsEnabled = false;
-        DiagNavBtn.IsEnabled = false;
-        SettingsBtn.IsEnabled = false;
-        ModsNavBtn.IsEnabled = false;
 
-        LoadUserLevels();
-        ShowGameView(GameTrackSelectView);
 
-        ServicesBtn.IsEnabled = true;
-        GameNavBtn.IsEnabled = true;
-        FaqNavBtn.IsEnabled = true;
-        DiagNavBtn.IsEnabled = true;
-        SettingsBtn.IsEnabled = true;
-        ModsNavBtn.IsEnabled = true;
-    }
 
-    private void PlayMenuBtn_MouseEnter(object s, System.Windows.Input.MouseEventArgs e)
-    {
-        PlayMenuBorder.Background = new LinearGradientBrush
-        {
-            StartPoint = new System.Windows.Point(0, 0),
-            EndPoint = new System.Windows.Point(1, 1),
-            GradientStops = new GradientStopCollection
-            {
-                new GradientStop(Color.FromRgb(0x1e, 0x24, 0x42), 0),
-                new GradientStop(Color.FromRgb(0x25, 0x2a, 0x4a), 1)
-            }
-        };
-    }
 
-    private void PlayMenuBtn_MouseLeave(object s, System.Windows.Input.MouseEventArgs e)
-    {
-        PlayMenuBorder.Background = new LinearGradientBrush
-        {
-            StartPoint = new System.Windows.Point(0, 0),
-            EndPoint = new System.Windows.Point(1, 1),
-            GradientStops = new GradientStopCollection
-            {
-                new GradientStop(Color.FromRgb(0x17, 0x1b, 0x32), 0),
-                new GradientStop(Color.FromRgb(0x20, 0x21, 0x3a), 1)
-            }
-        };
-    }
 
-    private void EditorMenuBtn_Click(object s, MouseButtonEventArgs e)
-    {
-        ShowGameView(GameEditorView);
-    }
 
-    private void EditorMenuBtn_MouseEnter(object s, System.Windows.Input.MouseEventArgs e)
-    {
-        EditorMenuBtn.Background = new SolidColorBrush(Color.FromRgb(0x2a, 0x2a, 0x2a));
-    }
 
-    private void EditorMenuBtn_MouseLeave(object s, System.Windows.Input.MouseEventArgs e)
-    {
-        EditorMenuBtn.Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x1e, 0x1e));
-    }
 
-    private void UserLevelCard_MouseEnter(object s, System.Windows.Input.MouseEventArgs e)
-    {
-        if (s is Border border)
-            border.Background = new SolidColorBrush(Color.FromRgb(0x2a, 0x2a, 0x2a));
-    }
 
-    private void UserLevelCard_MouseLeave(object s, System.Windows.Input.MouseEventArgs e)
-    {
-        if (s is Border border)
-            border.Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x1e, 0x1e));
-    }
 
-    private void ShowGameView(UIElement view)
-    {
-        GameMenuView.Visibility = Visibility.Collapsed;
-        GameTrackSelectView.Visibility = Visibility.Collapsed;
-        GamePlayView.Visibility = Visibility.Collapsed;
-        GameEditorView.Visibility = Visibility.Collapsed;
-        GameStatsView.Visibility = Visibility.Collapsed;
-        GameStatsDetailView.Visibility = Visibility.Collapsed;
-        OsuModeView.Visibility = Visibility.Collapsed;
-        OszDifficultyView.Visibility = Visibility.Collapsed;
-        view.Visibility = Visibility.Visible;
-    }
 
-    private void DefaultLevelBtn_Click(object s, MouseButtonEventArgs e)
-    {
-        ShowGameView(GamePlayView);
-        StartDefaultTrack();
-    }
 
-    private void LoadUserLevels()
-    {
-        Directory.CreateDirectory(LevelsDir);
-        var levels = Directory.GetDirectories(LevelsDir)
-            .Select(d =>
-            {
-                var notesFile = System.IO.Path.Combine(d, "notes.json");
-                if (!File.Exists(notesFile)) return null;
-                try
-                {
-                    var map = JsonSerializer.Deserialize<NoteMap>(File.ReadAllText(notesFile));
-                    if (map != null)
-                    {
-                        map.LevelDir = d;
-                        if (map.DateAdded == default)
-                            map.DateAdded = Directory.GetCreationTime(d);
-                    }
-                    return map;
-                }
-                catch
-                {
-                    return null;
-                }
-            })
-            .OfType<NoteMap>()
-            .ToList();
 
-        if (levels.Count == 0)
-        {
-            UserLevelsEmpty.Visibility = Visibility.Visible;
-            UserLevelsList.Visibility = Visibility.Collapsed;
-            UserLevelsList.ItemsSource = null;
-            _userTracksView = null;
-        }
-        else
-        {
-            UserLevelsEmpty.Visibility = Visibility.Collapsed;
-            UserLevelsList.Visibility = Visibility.Visible;
-            UserLevelsList.ItemsSource = levels;
-            _userTracksView = CollectionViewSource.GetDefaultView(UserLevelsList.ItemsSource);
-            _userTracksView.Filter = UserTrackFilterPredicate;
-            ApplyUserSorting();
-        }
 
-        LoadBuiltInTracks();
-    }
 
-    private void LoadBuiltInTracks()
-    {
-        var builtInTracks = GetBuiltInTracks();
 
-        BuiltInTracksList.Children.Clear();
 
-        foreach (var map in builtInTracks)
-        {
-            var card = new Border
-            {
-                Background = new SolidColorBrush(Color.FromRgb(0x17, 0x1b, 0x32)),
-                CornerRadius = new CornerRadius(10),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0x34, 0x3a, 0x78)),
-                BorderThickness = new Thickness(1),
-                Padding = new Thickness(14),
-                Margin = new Thickness(0, 0, 0, 6),
-                Cursor = Cursors.Hand,
-                Tag = map
-            };
 
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-            var iconBorder = new Border
-            {
-                Width = 32, Height = 32,
-                CornerRadius = new CornerRadius(16),
-                Background = new SolidColorBrush(Color.FromRgb(0x20, 0x27, 0x5a)),
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
-                VerticalAlignment = System.Windows.VerticalAlignment.Center
-            };
-            iconBorder.Child = new TextBlock
-            {
-                Text = "♪",
-                FontSize = 18,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x81, 0x8c, 0xf8)),
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                VerticalAlignment = System.Windows.VerticalAlignment.Center
-            };
-
-            var info = new StackPanel { VerticalAlignment = System.Windows.VerticalAlignment.Center };
-            info.Children.Add(new TextBlock
-            {
-                Text = map.Title ?? "Без названия",
-                FontFamily = new FontFamily("Segoe UI"),
-                FontSize = 14,
-                Foreground = Brushes.White,
-                FontWeight = FontWeights.SemiBold
-            });
-            info.Children.Add(new TextBlock
-            {
-                Text = $"{map.Notes?.Count ?? 0} нот · {map.Bpm:0} BPM",
-                FontFamily = new FontFamily("Segoe UI"),
-                FontSize = 11,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x81, 0x8c, 0xf8))
-            });
-
-            Grid.SetColumn(iconBorder, 0);
-            Grid.SetColumn(info, 1);
-            grid.Children.Add(iconBorder);
-            grid.Children.Add(info);
-            card.Child = grid;
-
-            card.MouseLeftButtonUp += BuiltInTrackCard_Click;
-            card.MouseEnter += (_, _) => card.Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x24, 0x42));
-            card.MouseLeave += (_, _) => card.Background = new SolidColorBrush(Color.FromRgb(0x17, 0x1b, 0x32));
-
-            BuiltInTracksList.Children.Add(card);
-        }
-    }
-
-    private void BuiltInTrackCard_Click(object s, MouseButtonEventArgs e)
-    {
-        if ((s as Border)?.Tag is not NoteMap map) return;
-
-        var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "NetFix_Tracks", map.Title ?? "track");
-        Directory.CreateDirectory(tempDir);
-
-        try
-        {
-            using var archive = ZipFile.OpenRead(map.LevelDir!);
-
-            var mp3Entry = archive.Entries.FirstOrDefault(e =>
-                e.Name.Equals(map.TrackFile ?? "track.mp3", StringComparison.OrdinalIgnoreCase) ||
-                e.FullName.EndsWith(map.TrackFile ?? "track.mp3", StringComparison.OrdinalIgnoreCase));
-
-            string? mp3Path = null;
-            if (mp3Entry != null)
-            {
-                mp3Path = System.IO.Path.Combine(tempDir, mp3Entry.Name);
-                mp3Entry.ExtractToFile(mp3Path, overwrite: true);
-            }
-
-            var bpm = map.Bpm > 0 ? map.Bpm : REFERENCE_BPM;
-
-            GamePage.Visibility = Visibility.Visible;
-            ShowGameView(GamePlayView);
-            StartGame(map.Notes, mp3Path, map.Title ?? "NetFix Track", bpm);
-        }
-        catch (Exception ex)
-        {
-            var bpm = map.Bpm > 0 ? map.Bpm : REFERENCE_BPM;
-            GamePage.Visibility = Visibility.Visible;
-            ShowGameView(GamePlayView);
-            StartGame(map.Notes, null, map.Title ?? "NetFix Track", bpm);
-        }
-    }
-
-    private List<NoteMap> GetUserLevelMaps()
-    {
-        var result = new List<NoteMap>();
-        if (!Directory.Exists(LevelsDir)) return result;
-        foreach (var dir in Directory.GetDirectories(LevelsDir))
-        {
-            var f = System.IO.Path.Combine(dir, "notes.json");
-            if (!File.Exists(f)) continue;
-            try
-            {
-                var m = JsonSerializer.Deserialize<NoteMap>(File.ReadAllText(f));
-                if (m != null) result.Add(m);
-            }
-            catch { }
-        }
-        return result;
-    }
-
-    private List<NoteMap> GetBuiltInTracks()
-    {
-        var result = new List<NoteMap>();
-        if (!Directory.Exists(BuiltInTracksDir)) return result;
-
-        var zipFiles = Directory.GetFiles(BuiltInTracksDir, "*.zip");
-
-        foreach (var zipPath in zipFiles)
-        {
-            try
-            {
-                using var archive = ZipFile.OpenRead(zipPath);
-
-                var notesEntry = archive.Entries.FirstOrDefault(e =>
-                    e.Name.Equals("notes.json", StringComparison.OrdinalIgnoreCase) ||
-                    e.FullName.EndsWith("notes.json", StringComparison.OrdinalIgnoreCase));
-
-                if (notesEntry == null) continue;
-
-                using var stream = notesEntry.Open();
-                using var reader = new StreamReader(stream);
-                var json = reader.ReadToEnd();
-
-                var map = JsonSerializer.Deserialize<NoteMap>(json);
-                if (map != null)
-                {
-                    map.LevelDir = zipPath;
-                    result.Add(map);
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        return result;
-    }
-
-    private bool UserTrackFilterPredicate(object item)
-    {
-        if (string.IsNullOrWhiteSpace(_userSearchText)) return true;
-        if (item is not NoteMap track) return false;
-        return track.Title?.Contains(_userSearchText, StringComparison.OrdinalIgnoreCase) == true;
-    }
-
-    private bool OsuTrackFilterPredicate(object item)
-    {
-        if (string.IsNullOrWhiteSpace(_osuSearchText)) return true;
-        if (item is not NoteMap track) return false;
-        return track.Title?.Contains(_osuSearchText, StringComparison.OrdinalIgnoreCase) == true;
-    }
-
-    private void TrackSearchBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        var tb = (TextBox)sender;
-        var text = tb.Text;
-
-        if (tb.Name == "OsuTrackSearchBox")
-        {
-            _osuSearchText = text;
-            if (FindName("OsuSearchPlaceholder") is TextBlock ph)
-                ph.Visibility = string.IsNullOrEmpty(text) ? Visibility.Visible : Visibility.Collapsed;
-            _osuTracksView?.Refresh();
-        }
-        else
-        {
-            _userSearchText = text;
-            if (FindName("SearchPlaceholder") is TextBlock ph)
-                ph.Visibility = string.IsNullOrEmpty(text) ? Visibility.Visible : Visibility.Collapsed;
-            _userTracksView?.Refresh();
-        }
-    }
-
-    private void StatsSearchBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        var tb = (TextBox)sender;
-        _statsSearchText = tb.Text;
-        if (FindName("StatsSearchPlaceholder") is TextBlock ph)
-            ph.Visibility = string.IsNullOrEmpty(_statsSearchText) ? Visibility.Visible : Visibility.Collapsed;
-        PopulateStatsList();
-    }
 
     private void TrackSearchBox_GotFocus(object sender, RoutedEventArgs e)
     {
@@ -10528,2591 +9314,53 @@ public partial class MainWindow : Window
             border.BorderBrush = new SolidColorBrush(Color.FromRgb(0x2a, 0x2a, 0x2a));
     }
 
-    private void SortMenuBtn_Click(object sender, RoutedEventArgs e)
-    {
-        var btn = (Button)sender;
-        var menu = btn.Tag as ContextMenu;
-        if (menu != null)
-        {
-            menu.PlacementTarget = btn;
-            menu.IsOpen = true;
-        }
-    }
 
-    private void SortMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not MenuItem item) return;
-        var tag = item.Tag?.ToString() ?? "DateAddedDesc";
 
-        var ctx = item.Parent as ContextMenu;
-        var target = ctx?.PlacementTarget;
-        if (target is Button btn && btn.Name == "OsuSortMenuBtn")
-        {
-            _settings.OsuSortMode = tag;
-            SettingsService.Save(_settings);
-            ApplyOsuSorting();
-            _osuTracksView?.Refresh();
-        }
-        else if (target is Button btn2 && btn2.Name == "StatsSortMenuBtn")
-        {
-            _settings.StatsSortMode = tag;
-            SettingsService.Save(_settings);
-            PopulateStatsList();
-        }
-        else
-        {
-            _settings.UserSortMode = tag;
-            SettingsService.Save(_settings);
-            ApplyUserSorting();
-            _userTracksView?.Refresh();
-        }
-    }
 
-    private void ApplyUserSorting()
-    {
-        if (_userTracksView == null) return;
-        ApplySortingToView(_userTracksView, _settings.UserSortMode);
-    }
 
-    private void ApplyOsuSorting()
-    {
-        if (_osuTracksView == null) return;
-        ApplySortingToView(_osuTracksView, _settings.OsuSortMode);
-    }
 
-    private void ApplySortingToView(ICollectionView view, string sortMode)
-    {
-        view.SortDescriptions.Clear();
-        switch (sortMode)
-        {
-            case "TitleAsc":
-                view.SortDescriptions.Add(new SortDescription("Title", ListSortDirection.Ascending));
-                break;
-            case "DateAddedDesc":
-                view.SortDescriptions.Add(new SortDescription("DateAdded", ListSortDirection.Descending));
-                break;
-            case "DateAddedAsc":
-                view.SortDescriptions.Add(new SortDescription("DateAdded", ListSortDirection.Ascending));
-                break;
-            case "LastPlayedDesc":
-                view.SortDescriptions.Add(new SortDescription("LastPlayed", ListSortDirection.Descending));
-                break;
-            case "NotesAsc":
-                view.SortDescriptions.Add(new SortDescription("NoteCount", ListSortDirection.Ascending));
-                break;
-            case "NotesDesc":
-                view.SortDescriptions.Add(new SortDescription("NoteCount", ListSortDirection.Descending));
-                break;
-        }
-    }
 
-    private const double FALL_SEC = 1.6;
-    private const double REFERENCE_BPM = 140.0;
-    private const double HIT_PERFECT = 0.06;
-    private const double HIT_GOOD = 0.15;
 
-    private const double LANE_WIDTH = 50;
-    private const double LANE_SPACING = 60;
-    private const double LANE_OFFSET = 85;
-    private const double CANVAS_WIDTH = 400;
-    private const double NOTE_SIZE = 50;
-    private const double ARROW_FONT_SIZE = 20;
 
-    private static double GetLaneLeft(int lane) => LANE_OFFSET + lane * LANE_SPACING;
-    private static double GetLaneCenterX(int lane) => GetLaneLeft(lane) + (LANE_WIDTH / 2);
 
-    private static readonly string[] ArrowChars = { "◀", "▼", "▲", "▶" };
-    private static readonly Color[] LaneColors =
-    {
-        Color.FromRgb(0xf4, 0x3f, 0x5e),
-        Color.FromRgb(0xf5, 0x9e, 0x0b),
-        Color.FromRgb(0x22, 0xc5, 0x5e),
-        Color.FromRgb(0x63, 0x66, 0xf1),
-    };
 
-    private void StartDefaultTrack()
-    {
-        var notes = new List<NoteEntry>();
-        int[] pattern = { 0, 2, 1, 3, 0, 1, 2, 3, 1, 0, 3, 2 };
-        double beatSec = 60.0 / REFERENCE_BPM;
 
-        for (int i = 0; i < 48; i++)
-            notes.Add(new NoteEntry { Time = beatSec * (i + 2), Lane = pattern[i % pattern.Length] });
 
-        StartGame(notes, null, "NetFix, Default Beat", REFERENCE_BPM);
-    }
 
-    private void ShowGameOverlay()
-    {
-        if (_gameOverlayPanel != null) return;
 
-        ServicesBtn.IsEnabled = false;
-        GameNavBtn.IsEnabled = false;
-        FaqNavBtn.IsEnabled = false;
-        DiagNavBtn.IsEnabled = false;
-        SettingsBtn.IsEnabled = false;
-        ModsNavBtn.IsEnabled = false;
 
-        var blurEffect = new System.Windows.Media.Effects.BlurEffect { Radius = 6 };
-        MainPage.Effect = blurEffect;
-        MainPage.Opacity = 0.45;
 
-        _gameOverlayPanel = new Border
-        {
-            Background = new SolidColorBrush(Color.FromArgb(210, 0x0d, 0x0d, 0x18)),
-            VerticalAlignment = System.Windows.VerticalAlignment.Stretch,
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
-            Opacity = 0
-        };
-        Panel.SetZIndex(_gameOverlayPanel, 8);
 
-        var innerBorder = new Border
-        {
-            CornerRadius = new CornerRadius(12),
-            ClipToBounds = true,
-            Margin = new Thickness(0)
-        };
 
-        var trackSelectGrid = BuildInlineTrackSelect();
-        innerBorder.Child = trackSelectGrid;
-        _gameOverlayPanel.Child = innerBorder;
 
-        Grid.SetRow(_gameOverlayPanel, 1);
-        ContentGrid.Children.Add(_gameOverlayPanel);
 
-        _gameOverlayPanel.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-    }
 
-    private void HideGameOverlay()
-    {
-        if (_gameOverlayPanel == null) return;
 
-        ServicesBtn.IsEnabled = true;
-        GameNavBtn.IsEnabled = true;
-        FaqNavBtn.IsEnabled = true;
-        DiagNavBtn.IsEnabled = true;
-        SettingsBtn.IsEnabled = true;
-        ModsNavBtn.IsEnabled = true;
 
-        MainPage.Effect = null;
-        MainPage.Opacity = 1.0;
 
-        var panel = _gameOverlayPanel;
-        _gameOverlayPanel = null;
 
-        var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(220));
-        fadeOut.Completed += (_, _) => ContentGrid.Children.Remove(panel);
-        panel.BeginAnimation(OpacityProperty, fadeOut);
-    }
 
-    private Grid BuildInlineTrackSelect()
-    {
-        var root = new Grid { Background = Brushes.Transparent };
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-        var header = new Grid { Margin = new Thickness(24, 18, 24, 0) };
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var titleBlock = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = System.Windows.VerticalAlignment.Center };
-        titleBlock.Children.Add(new TextBlock
-        {
-            Text = "🎮  Выбор трека",
-            FontFamily = new FontFamily("Segoe UI Emoji"),
-            FontSize = 18,
-            FontWeight = FontWeights.Bold,
-            Foreground = Brushes.White
-        });
-        titleBlock.Children.Add(new TextBlock
-        {
-            Text = "  · сканирование идёт в фоне",
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 12,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x77)),
-            VerticalAlignment = System.Windows.VerticalAlignment.Bottom,
-            Margin = new Thickness(0, 0, 0, 2)
-        });
-        Grid.SetColumn(titleBlock, 0);
-        header.Children.Add(titleBlock);
 
-        var closeBtn = new Button
-        {
-            Style = (Style)FindResource("FlatBtnCentered"),
-            Width = 32,
-            Height = 32,
-            Padding = new Thickness(0)
-        };
-        closeBtn.Content = new System.Windows.Shapes.Path
-        {
-            Data = (Geometry)FindResource("CloseIcon"),
-            Stroke = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66)),
-            StrokeThickness = 2,
-            Width = 12,
-            Height = 12,
-            Stretch = Stretch.Uniform
-        };
-        closeBtn.Click += (_, _) =>
-        {
-            StopGame();
-            HideGameOverlay();
-        };
-        Grid.SetColumn(closeBtn, 1);
-        header.Children.Add(closeBtn);
 
-        var sep = new Border
-        {
-            Height = 1,
-            Background = new SolidColorBrush(Color.FromRgb(0x22, 0x22, 0x33)),
-            Margin = new Thickness(0, 12, 0, 0)
-        };
 
-        var headerStack = new StackPanel();
-        headerStack.Children.Add(header);
-        headerStack.Children.Add(sep);
-        Grid.SetRow(headerStack, 0);
-        root.Children.Add(headerStack);
 
-        var bodyScroll = new ScrollViewer
-        {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Margin = new Thickness(24, 16, 24, 24)
-        };
 
-        var body = new StackPanel();
 
-        var warnBorder = new Border
-        {
-            Background = new SolidColorBrush(Color.FromRgb(0x1a, 0x17, 0x10)),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(12, 10, 12, 10),
-            Margin = new Thickness(0, 0, 0, 18),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(80, 0xf5, 0x9e, 0x0b)),
-            BorderThickness = new Thickness(1)
-        };
 
-        var warnGrid = new Grid();
-        warnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        warnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var warningIcon = new System.Windows.Shapes.Path
-        {
-            Data = Geometry.Parse("M12,2 L22,20 L2,20 Z M12,9 L12,14 M12,16 L12,18"),
-            Stroke = new SolidColorBrush(Color.FromRgb(0xf5, 0x9e, 0x0b)),
-            StrokeThickness = 2,
-            Width = 20,
-            Height = 20,
-            Stretch = Stretch.Uniform,
-            Margin = new Thickness(0, 4, 10, 0),
-            VerticalAlignment = System.Windows.VerticalAlignment.Top
-        };
-        Grid.SetColumn(warningIcon, 0);
-        warnGrid.Children.Add(warningIcon);
 
-        var warnText = new TextBlock
-        {
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 11,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x77, 0x55)),
-            TextWrapping = TextWrapping.Wrap
-        };
-        warnText.Inlines.Add(new Run { Text = "ВНИМАНИЕ", Foreground = new SolidColorBrush(Color.FromRgb(0xf5, 0x9e, 0x0b)), FontWeight = FontWeights.Bold });
-        warnText.Inlines.Add(new LineBreak());
-        warnText.Inlines.Add(new Run { Text = "Игра содержит мигающие эффекты и не рекомендуется лицам, подверженным эпилептическим припадкам." });
-        warnText.Inlines.Add(new LineBreak());
-        warnText.Inlines.Add(new Run { Text = "Продолжительное использование может привести к головокружению и возникновению зрительных иллюзий. Пожалуйста, соблюдайте режим отдыха и ограничьте время непрерывной игры." });
-        Grid.SetColumn(warnText, 1);
-        warnGrid.Children.Add(warnText);
 
-        warnBorder.Child = warnGrid;
-        body.Children.Add(warnBorder);
 
-        var section1 = new TextBlock
-        {
-            Text = "ВСТРОЕННЫЕ ТРЕКИ",
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 10,
-            FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x55)),
-            Margin = new Thickness(0, 0, 0, 8)
-        };
-        body.Children.Add(section1);
 
-        var builtInTracks = GetBuiltInTracks();
-        if (builtInTracks.Count > 0)
-        {
-            body.Children.Add(new TextBlock
-            {
-                Text = "ТРЕКИ NETFIX",
-                FontFamily = new FontFamily("Segoe UI"),
-                FontSize = 10, FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x3b, 0x82, 0xf6)),
-                Margin = new Thickness(0, 0, 0, 8)
-            });
 
-            foreach (var map in builtInTracks)
-            {
-                var bCard = new Border
-                {
-                    Background = new SolidColorBrush(Color.FromRgb(0x17, 0x1b, 0x32)),
-                    CornerRadius = new CornerRadius(8),
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(0x3b, 0x82, 0xf6)),
-                    BorderThickness = new Thickness(1),
-                    Padding = new Thickness(14, 10, 14, 10),
-                    Margin = new Thickness(0, 0, 0, 6),
-                    Cursor = Cursors.Hand
-                };
-                var bGrid = new Grid();
-                bGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                bGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                bGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-                var bIconBorder = new Border
-                {
-                    Width = 32, Height = 32,
-                    CornerRadius = new CornerRadius(6),
-                    Background = new SolidColorBrush(Color.FromRgb(0x20, 0x27, 0x5a)),
-                    Margin = new Thickness(0, 0, 10, 0),
-                    VerticalAlignment = System.Windows.VerticalAlignment.Center
-                };
-                bIconBorder.Child = new TextBlock
-                {
-                    Text = "♪",
-                    FontSize = 18,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0x81, 0x8c, 0xf8)),
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                    VerticalAlignment = System.Windows.VerticalAlignment.Center
-                };
 
-                var bInfo = new StackPanel { VerticalAlignment = System.Windows.VerticalAlignment.Center };
-                bInfo.Children.Add(new TextBlock
-                {
-                    Text = map.Title ?? "Без названия",
-                    FontFamily = new FontFamily("Segoe UI"),
-                    FontSize = 13, FontWeight = FontWeights.SemiBold,
-                    Foreground = Brushes.White
-                });
-                bInfo.Children.Add(new TextBlock
-                {
-                    Text = $"{map.Notes?.Count ?? 0} нот · {map.Bpm:0} BPM · {map.Author ?? "NetFix"}",
-                    FontFamily = new FontFamily("Segoe UI"),
-                    FontSize = 11,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0x81, 0x8c, 0xf8))
-                });
 
-                var bPlayBtn = new Button
-                {
-                    Style = (Style)FindResource("AccentBtn"),
-                    Padding = new Thickness(12, 6, 12, 6),
-                    FontSize = 12,
-                    VerticalAlignment = System.Windows.VerticalAlignment.Center
-                };
-                bPlayBtn.Content = "▶";
 
-                Grid.SetColumn(bIconBorder, 0);
-                Grid.SetColumn(bInfo, 1);
-                Grid.SetColumn(bPlayBtn, 2);
-                bGrid.Children.Add(bIconBorder);
-                bGrid.Children.Add(bInfo);
-                bGrid.Children.Add(bPlayBtn);
-                bCard.Child = bGrid;
 
-                var capturedMap = map;
-                Action startBuiltIn = () =>
-                {
-                    HideGameOverlay();
-                    ShowGameInOverlay(() =>
-                    {
-                        var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "NetFix_Tracks", capturedMap.Title ?? "track");
-                        Directory.CreateDirectory(tempDir);
 
-                        try
-                        {
-                            using var archive = ZipFile.OpenRead(capturedMap.LevelDir!);
-
-                            var mp3Entry = archive.Entries.FirstOrDefault(e =>
-                                e.Name.Equals(capturedMap.TrackFile ?? "track.mp3", StringComparison.OrdinalIgnoreCase) ||
-                                e.FullName.EndsWith(capturedMap.TrackFile ?? "track.mp3", StringComparison.OrdinalIgnoreCase));
-
-                            string? mp3Path = null;
-                            if (mp3Entry != null)
-                            {
-                                mp3Path = System.IO.Path.Combine(tempDir, mp3Entry.Name);
-                                mp3Entry.ExtractToFile(mp3Path, overwrite: true);
-                            }
-
-                            var bpm = capturedMap.Bpm > 0 ? capturedMap.Bpm : REFERENCE_BPM;
-                            StartGame(capturedMap.Notes, mp3Path, capturedMap.Title ?? "NetFix Track", bpm);
-                        }
-                        catch (Exception ex)
-                        {
-                            var bpm = capturedMap.Bpm > 0 ? capturedMap.Bpm : REFERENCE_BPM;
-                            StartGame(capturedMap.Notes, null, capturedMap.Title ?? "NetFix Track", bpm);
-                        }
-                    });
-                };
-                bCard.MouseLeftButtonUp += (_, _) => startBuiltIn();
-                bPlayBtn.Click += (_, _) => startBuiltIn();
-
-                bCard.MouseEnter += (_, _) => bCard.Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x24, 0x42));
-                bCard.MouseLeave += (_, _) => bCard.Background = new SolidColorBrush(Color.FromRgb(0x17, 0x1b, 0x32));
-
-                body.Children.Add(bCard);
-            }
-        }
-
-        var userLevels = GetUserLevelMaps();
-        if (userLevels.Count > 0)
-        {
-            body.Children.Add(new TextBlock
-            {
-                Text = "ПОЛЬЗОВАТЕЛЬСКИЕ ТРЕКИ",
-                FontFamily = new FontFamily("Segoe UI"),
-                FontSize = 10, FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x55)),
-                Margin = new Thickness(0, 0, 0, 8)
-            });
-
-            foreach (var map in userLevels)
-            {
-                var uCard = new Border
-                {
-                    Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x1e, 0x1e)),
-                    CornerRadius = new CornerRadius(8),
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
-                    BorderThickness = new Thickness(1),
-                    Padding = new Thickness(14, 10, 14, 10),
-                    Margin = new Thickness(0, 0, 0, 6),
-                    Cursor = Cursors.Hand
-                };
-                var uGrid = new Grid();
-                uGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                uGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-                var uInfo = new StackPanel { VerticalAlignment = System.Windows.VerticalAlignment.Center };
-                uInfo.Children.Add(new TextBlock
-                {
-                    Text = map.Title ?? "Без названия",
-                    FontFamily = new FontFamily("Segoe UI"),
-                    FontSize = 13, FontWeight = FontWeights.SemiBold,
-                    Foreground = Brushes.White
-                });
-                uInfo.Children.Add(new TextBlock
-                {
-                    Text = $"{map.Notes?.Count ?? 0} нот · {map.Bpm:0} BPM",
-                    FontFamily = new FontFamily("Segoe UI"),
-                    FontSize = 11,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66))
-                });
-
-                var uPlayBtn = new Button
-                {
-                    Style = (Style)FindResource("OutlineBtn"),
-                    Padding = new Thickness(12, 6, 12, 6),
-                    FontSize = 12,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0xaa, 0xaa, 0xaa)),
-                    VerticalAlignment = System.Windows.VerticalAlignment.Center
-                };
-                uPlayBtn.Content = "▶";
-
-                Grid.SetColumn(uInfo, 0);
-                Grid.SetColumn(uPlayBtn, 1);
-                uGrid.Children.Add(uInfo);
-                uGrid.Children.Add(uPlayBtn);
-                uCard.Child = uGrid;
-
-                var capturedMap = map;
-                Action startUser = () =>
-                {
-                    HideGameOverlay();
-                    ShowGameInOverlay(() =>
-                    {
-                        var dir = System.IO.Path.Combine(LevelsDir, capturedMap.Title ?? "level");
-                        var mp3 = System.IO.Path.Combine(dir, capturedMap.TrackFile ?? "track.mp3");
-                        var bpm = capturedMap.Bpm > 0 ? capturedMap.Bpm : REFERENCE_BPM;
-                        StartGame(capturedMap.Notes, File.Exists(mp3) ? mp3 : null, capturedMap.Title ?? "Custom", bpm);
-                    });
-                };
-                uCard.MouseLeftButtonUp += (_, _) => startUser();
-                uPlayBtn.Click += (_, _) => startUser();
-
-                uCard.MouseEnter += (_, _) => uCard.Background = new SolidColorBrush(Color.FromRgb(0x26, 0x26, 0x26));
-                uCard.MouseLeave += (_, _) => uCard.Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x1e, 0x1e));
-
-                body.Children.Add(uCard);
-            }
-        }
-
-        bodyScroll.Content = body;
-        Grid.SetRow(bodyScroll, 1);
-        root.Children.Add(bodyScroll);
-
-        return root;
-    }
-
-    private void ShowGameInOverlay(Action startGameAction)
-    {
-        MainPage.Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 5 };
-        MainPage.Opacity = 0.35;
-
-        ServicesBtn.IsEnabled = false;
-        GameNavBtn.IsEnabled = false;
-        FaqNavBtn.IsEnabled = false;
-        DiagNavBtn.IsEnabled = false;
-        SettingsBtn.IsEnabled = false;
-        ModsNavBtn.IsEnabled = false;
-
-        EditorMenuBtn.Visibility = Visibility.Collapsed;
-
-        GamePage.Background = new SolidColorBrush(Colors.Transparent);
-        GamePage.Visibility = Visibility.Visible;
-        Panel.SetZIndex(GamePage, 9);
-
-        ShowGameView(GamePlayView);
-
-        _gameOverlayActive = true;
-
-        GamePage.Opacity = 0;
-        GamePage.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-
-        startGameAction();
-    }
-
-    private void StartGame(List<NoteEntry> notes, string? mp3Path, string title, double bpm)
-    {
-        StopGame();
-
-        _lastGameNotes = notes.Select(n => new NoteEntry { Time = n.Time, Lane = n.Lane }).ToList();
-        _lastGameMp3Path = mp3Path;
-        _lastGameTitle = title;
-        _lastGameBpm = bpm;
-
-        if (!_gameOverlayActive)
-        {
-            ServicesBtn.IsEnabled = false;
-            FaqNavBtn.IsEnabled = false;
-            DiagNavBtn.IsEnabled = false;
-            SettingsBtn.IsEnabled = false;
-            ModsNavBtn.IsEnabled = false;
-        }
-
-        _currentFallSec = GetFallSecondsForBpm(bpm);
-        _pendingNotes = notes
-            .Select(n => new NoteEntry { Time = n.Time, Lane = n.Lane })
-            .OrderBy(n => n.Time)
-            .ToList();
-        _activeNotes = new();
-        _gameScore = 0;
-        _gameCombo = 0;
-        _totalNotes = notes.Count;
-        _hitNotes = 0;
-        _missCount = 0;
-        _consecutiveMisses = 0;
-        _gameOverTriggered = false;
-        _lastComboAuraLevel = 0;
-        _maxCombo = 0;
-        _currentTrackTitle = title;
-        _gameStartDateTime = DateTime.Now;
-        _isInGame = true;
-        _discord.IsPriorityMode = true;
-
-        GameScore.Text = "0";
-        GameCombo.Text = "0x";
-        GameAccuracy.Text = "100%";
-        GameBpm.Text = $"{bpm:0}";
-        GameHeaderTitle.Text = $"{title} · {bpm:0} BPM";
-        GameHUDPanel.Visibility = Visibility.Visible;
-        JudgeText.Opacity = 0;
-        _judgeVisibleUntil = -1;
-        Array.Fill(_hitZoneFlashUntil, -1);
-        RebuildGameCanvasBase();
-        Dispatcher.BeginInvoke(new Action(RebuildGameCanvasBase), DispatcherPriority.Loaded);
-
-        CountdownOverlay.Visibility = Visibility.Visible;
-        CountdownText.Text = "3";
-        int count = 3;
-        _countdownTimer?.Stop();
-        _countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _countdownTimer.Tick += (_, _) =>
-        {
-            count--;
-            if (count > 0) { CountdownText.Text = count.ToString(); return; }
-            _countdownTimer.Stop();
-            CountdownOverlay.Visibility = Visibility.Collapsed;
-
-            if (mp3Path != null)
-            {
-                _editorPlayer.Volume = Math.Pow(_settings.GameVolume, 3);
-                _editorPlayer.Open(new Uri(mp3Path));
-                _editorPlayer.Play();
-            }
-
-            _gameClock.Restart();
-            CompositionTarget.Rendering -= GameTick;
-            CompositionTarget.Rendering += GameTick;
-            PreviewKeyDown += Game_KeyDown;
-            PreviewKeyUp += Game_KeyUp;
-        };
-
-        _effectTimer?.Stop();
-        _effectTimer = new DispatcherTimer(DispatcherPriority.Background)
-            { Interval = TimeSpan.FromMilliseconds(16) };
-        _effectTimer.Tick += (_, _) => {
-            for (int i = 0; i < 3 && _effectQueue.TryDequeue(out var action); i++)
-                action();
-        };
-        _effectTimer.Start();
-
-        _countdownTimer.Start();
-
-        _discordGameTimer?.Stop();
-        _discordGameTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-        _discordGameTimer.Tick += (_, _) => {
-            int acc = _totalNotes > 0 ? (int)((double)_hitNotes / _totalNotes * 100) : 100;
-            _discord.SetGamePlaying(_currentTrackTitle, _gameCombo, acc, _gameStartDateTime);
-        };
-        _discordGameTimer.Start();
-        _discord.SetGamePlaying(_currentTrackTitle, 0, 100, _gameStartDateTime);
-    }
-
-    private static double GetFallSecondsForBpm(double bpm)
-    {
-        if (bpm <= 0) bpm = REFERENCE_BPM;
-        double ratio = REFERENCE_BPM / bpm;
-        double adjusted = Math.Pow(ratio, 1.2);
-        return Math.Clamp(FALL_SEC * adjusted, 0.6, 2.6);
-    }
-
-    private void RebuildGameCanvasBase()
-    {
-        double canvasH = GameCanvas.ActualHeight > 0 ? GameCanvas.ActualHeight : 500;
-        double hitY = canvasH - 70;
-        GameCanvas.Children.Clear();
-
-        for (int i = 0; i < 4; i++)
-        {
-            var laneStrip = new System.Windows.Shapes.Rectangle
-            {
-                Width = LANE_WIDTH,
-                Height = canvasH,
-                IsHitTestVisible = false
-            };
-            laneStrip.Fill = new LinearGradientBrush(
-                new GradientStopCollection
-                {
-                    new GradientStop(Color.FromArgb(0, LaneColors[i].R, LaneColors[i].G, LaneColors[i].B), 0),
-                    new GradientStop(Color.FromArgb(18, LaneColors[i].R, LaneColors[i].G, LaneColors[i].B), 0.5),
-                    new GradientStop(Color.FromArgb(8, LaneColors[i].R, LaneColors[i].G, LaneColors[i].B), 1),
-                },
-                new System.Windows.Point(0, 0), new System.Windows.Point(0, 1));
-            Canvas.SetLeft(laneStrip, GetLaneLeft(i));
-            Canvas.SetTop(laneStrip, 0);
-            GameCanvas.Children.Add(laneStrip);
-
-            var laneBorder = new System.Windows.Shapes.Rectangle
-            {
-                Width = 1,
-                Height = canvasH,
-                Fill = new SolidColorBrush(Color.FromArgb(25, LaneColors[i].R, LaneColors[i].G, LaneColors[i].B)),
-                IsHitTestVisible = false
-            };
-            Canvas.SetLeft(laneBorder, GetLaneLeft(i));
-            Canvas.SetTop(laneBorder, 0);
-            GameCanvas.Children.Add(laneBorder);
-        }
-
-        var hitLine = new System.Windows.Shapes.Rectangle
-        {
-            Width = CANVAS_WIDTH,
-            Height = 2,
-            IsHitTestVisible = false
-        };
-        hitLine.Fill = new LinearGradientBrush(
-            new GradientStopCollection
-            {
-                new GradientStop(Color.FromArgb(0, 255, 255, 255), 0),
-                new GradientStop(Color.FromArgb(50, 255, 255, 255), 0.5),
-                new GradientStop(Color.FromArgb(0, 255, 255, 255), 1),
-            },
-            new System.Windows.Point(0, 0), new System.Windows.Point(1, 0));
-        Canvas.SetLeft(hitLine, 0);
-        Canvas.SetTop(hitLine, hitY + 24);
-        GameCanvas.Children.Add(hitLine);
-
-        for (int i = 0; i < 4; i++)
-        {
-            var hz = new Border
-            {
-                Width = NOTE_SIZE,
-                Height = NOTE_SIZE,
-                CornerRadius = new CornerRadius(8),
-                BorderThickness = new Thickness(1.5),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(80, LaneColors[i].R, LaneColors[i].G, LaneColors[i].B)),
-                Background = new SolidColorBrush(Color.FromArgb(25, LaneColors[i].R, LaneColors[i].G, LaneColors[i].B)),
-                Child = new TextBlock
-                {
-                    Text = ArrowChars[i],
-                    FontSize = ARROW_FONT_SIZE,
-                    Foreground = new SolidColorBrush(Color.FromArgb(180, LaneColors[i].R, LaneColors[i].G, LaneColors[i].B)),
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-                Effect = new System.Windows.Media.Effects.DropShadowEffect
-                {
-                    Color = LaneColors[i],
-                    BlurRadius = 10,
-                    ShadowDepth = 0,
-                    Opacity = 0.3
-                }
-            };
-            Canvas.SetLeft(hz, GetLaneLeft(i));
-            Canvas.SetTop(hz, hitY);
-            GameCanvas.Children.Add(hz);
-        }
-    }
-
-    private void GameTick(object? s, EventArgs e)
-    {
-        double now = _gameClock.Elapsed.TotalSeconds;
-        double canvasH = GameCanvas.ActualHeight > 0 ? GameCanvas.ActualHeight : 500;
-        double hitY = canvasH - 70;
-
-        while (_pendingNotes.Count > 0 && _pendingNotes[0].Time - now <= _currentFallSec)
-        {
-            var note = _pendingNotes[0];
-            _pendingNotes.RemoveAt(0);
-
-            var effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                Color = LaneColors[note.Lane],
-                BlurRadius = 12,
-                ShadowDepth = 0,
-                Opacity = 0.6
-            };
-
-            var arrow = new Border
-            {
-                Width = NOTE_SIZE, Height = NOTE_SIZE,
-                CornerRadius = new CornerRadius(8),
-                BorderThickness = new Thickness(1.5),
-                BorderBrush = _laneBrushes[note.Lane],
-                Background = _noteGradients[note.Lane],
-                Tag = note,
-                Child = new TextBlock
-                {
-                    Text = ArrowChars[note.Lane], FontSize = ARROW_FONT_SIZE,
-                    Foreground = _laneBrushes[note.Lane],
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-                Effect = effect
-            };
-            Canvas.SetLeft(arrow, GetLaneLeft(note.Lane));
-            Canvas.SetTop(arrow, -50);
-            GameCanvas.Children.Add(arrow);
-            _activeNotes.Add(note);
-            note.Visual = arrow;
-            note.Effect = effect;
-        }
-
-        var toRemove = new List<NoteEntry>();
-        foreach (var note in _activeNotes)
-        {
-            if (note.Visual == null) continue;
-            double progress = (now - (note.Time - _currentFallSec)) / _currentFallSec;
-            double top = -50 + progress * (hitY + 50);
-            Canvas.SetTop(note.Visual, top);
-
-            double distToHit = Math.Abs(top - hitY);
-            if (distToHit < 90 && note.Effect != null)
-            {
-                double proximity = 1.0 - (distToHit / 90.0);
-                note.Effect.BlurRadius = 12 + proximity * 22;
-                note.Effect.Opacity = 0.6 + proximity * 0.35;
-            }
-
-            if (top > canvasH + 10)
-            {
-                GameCanvas.Children.Remove(note.Visual);
-                toRemove.Add(note);
-                _gameCombo = 0;
-                _missCount++;
-                _consecutiveMisses++;
-                ShowJudge("MISS", Colors.Gray);
-                _effectQueue.Enqueue(() => UpdateComboAura());
-                UpdateHUD();
-
-                if ((_missCount >= 10 || _consecutiveMisses >= 10) && !_gameOverTriggered)
-                {
-                    _gameOverTriggered = true;
-                    GameOver(failed: true);
-                    return;
-                }
-            }
-        }
-        foreach (var n in toRemove) _activeNotes.Remove(n);
-
-        if (_judgeVisibleUntil > 0 && now >= _judgeVisibleUntil)
-        {
-            JudgeText.Opacity = 0;
-            _judgeVisibleUntil = -1;
-        }
-
-        for (int lane = 0; lane < _hitZoneFlashUntil.Length; lane++)
-        {
-            if (_hitZoneFlashUntil[lane] > 0 && now >= _hitZoneFlashUntil[lane])
-            {
-                SetHitZoneOpacity(lane, 1.0);
-                _hitZoneFlashUntil[lane] = -1;
-            }
-        }
-
-        if (!_gameOverTriggered && _pendingNotes.Count == 0 && _activeNotes.Count == 0)
-            GameOver(failed: false);
-    }
-
-    private void Game_KeyDown(object s, System.Windows.Input.KeyEventArgs e)
-    {
-        if (e.IsRepeat)
-            return;
-
-        int lane = GetGameLane(e.Key);
-        if (lane < 0) return;
-        e.Handled = true;
-
-        _activeLanes.Add(lane);
-
-        double now = _gameClock.Elapsed.TotalSeconds;
-
-        var best = _activeNotes
-            .Where(n => n.Lane == lane && !n.Hit)
-            .OrderBy(n => n.Time)
-            .FirstOrDefault();
-
-        if (best == null) return;
-
-        double bestDist = Math.Abs(best.Time - now);
-
-        if (bestDist <= HIT_PERFECT)
-        {
-            HitNote(best, lane, 300, "PERFECT", LaneColors[lane]);
-        }
-        else if (bestDist <= HIT_GOOD)
-        {
-            HitNote(best, lane, 100, "GOOD", Color.FromRgb(0xa1, 0xa1, 0xaa));
-        }
-        else
-        {
-            _gameCombo = 0;
-            ShowJudge("MISS", Colors.Gray);
-        }
-
-        UpdateHUD();
-    }
-
-    private void Game_KeyUp(object s, System.Windows.Input.KeyEventArgs e)
-    {
-        int lane = GetGameLane(e.Key);
-        if (lane < 0) return;
-        _activeLanes.Remove(lane);
-        if (_activeLanes.Count == 0)
-            _hitLanesThisFrame.Clear();
-        e.Handled = true;
-    }
-
-    private void HitNote(NoteEntry note, int lane, int baseScore, string judge, Color color)
-    {
-        note.Hit = true;
-        _gameCombo++;
-        if (_gameCombo > _maxCombo) _maxCombo = _gameCombo;
-        _hitNotes++;
-        _consecutiveMisses = 0;
-        _gameScore += baseScore * _gameCombo;
-        _hitLanesThisFrame.Add(lane);
-
-        if (!_settings.DisableComboEffect)
-        {
-            bool extremeHit = _activeLanes.Contains(0) && _activeLanes.Contains(3) &&
-                              _hitLanesThisFrame.Contains(0) && _hitLanesThisFrame.Contains(3);
-            bool tripleHit = _activeLanes.Count >= 3 && _hitLanesThisFrame.Count >= 3;
-            if (extremeHit || tripleHit)
-            {
-                _effectQueue.Enqueue(() => SpawnDoubleStrikeEffect(_currentComboColor));
-                _hitLanesThisFrame.Clear();
-            }
-        }
-
-        if (judge == "PERFECT")
-        {
-            _perfectStreak++;
-            if (_perfectStreak > 0 && _perfectStreak % 10 == 0)
-            {
-                _effectQueue.Enqueue(() =>
-                    SpawnMilestoneAnnounce($"PERFECT ×{_perfectStreak}! ✨",
-                        Color.FromRgb(0xff, 0xd7, 0x00)));
-            }
-        }
-        else
-        {
-            _perfectStreak = 0;
-        }
-
-        ShowJudge(judge, color);
-        FlashHitZone(lane);
-
-        int capturedLane = lane;
-        string capturedJudge = judge;
-        _effectQueue.Enqueue(() =>
-        {
-            SpawnHitEffect(capturedLane, capturedJudge);
-            UpdateComboAura();
-        });
-
-        if (note.Visual != null)
-            GameCanvas.Children.Remove(note.Visual);
-
-        _activeNotes.Remove(note);
-    }
-
-    private void UpdateHUD()
-    {
-        GameScore.Text = _gameScore.ToString("N0");
-        GameCombo.Text = _gameCombo + "x";
-        int acc = _totalNotes > 0 ? (int)((double)_hitNotes / _totalNotes * 100) : 100;
-        GameAccuracy.Text = acc + "%";
-
-        if (_gameCombo > 1)
-        {
-            if (GameCombo.RenderTransform is not ScaleTransform)
-            {
-                GameCombo.RenderTransform = new ScaleTransform(1, 1);
-                GameCombo.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
-            }
-            var pulse = new DoubleAnimation(1.35, 1.0, TimeSpan.FromMilliseconds(220))
-            {
-                EasingFunction = new ElasticEase { EasingMode = EasingMode.EaseOut, Oscillations = 1, Springiness = 4 }
-            };
-            ((ScaleTransform)GameCombo.RenderTransform).BeginAnimation(ScaleTransform.ScaleXProperty, pulse);
-            ((ScaleTransform)GameCombo.RenderTransform).BeginAnimation(ScaleTransform.ScaleYProperty,
-                new DoubleAnimation(1.35, 1.0, TimeSpan.FromMilliseconds(220))
-                {
-                    EasingFunction = new ElasticEase { EasingMode = EasingMode.EaseOut, Oscillations = 1, Springiness = 4 }
-                });
-        }
-
-        CheckGameEvents();
-    }
-
-    private void UpdateComboAura()
-    {
-        int newLevel = 0;
-        int[] thresholds = [7, 15, 22, 30, 37, 45, 52, 60, 67, 75, 82, 90, 97, 105, 112, 120, 150, 200, 220, 250, 300];
-        for (int i = thresholds.Length - 1; i >= 0; i--)
-        {
-            if (_gameCombo >= thresholds[i]) { newLevel = i + 1; break; }
-        }
-        if (newLevel == _lastComboAuraLevel) return;
-        _lastComboAuraLevel = newLevel;
-
-        var levels = new (Color main, Color? accent, string announce, byte alpha)[]
-        {
-            (Color.FromRgb(0x38, 0xbf, 0xf8), null, "COMBO ×7!", 60),
-            (Color.FromRgb(0x63, 0x66, 0xf1), null, "COMBO ×15!", 70),
-            (Color.FromRgb(0x10, 0xb9, 0x81), null, "COMBO ×22!", 75),
-            (Color.FromRgb(0xf5, 0x9e, 0x0b), null, "COMBO ×30! ⚡", 80),
-            (Color.FromRgb(0xf9, 0x73, 0x16), null, "COMBO ×37! 🔥", 85),
-            (Color.FromRgb(0xf4, 0x3f, 0x5e), null, "COMBO ×45! 💥", 90),
-            (Color.FromRgb(0xef, 0x44, 0x44), null, "COMBO ×52!", 95),
-            (Color.FromRgb(0xa8, 0x55, 0xf7), null, "COMBO ×60!", 100),
-            (Color.FromRgb(0xec, 0x4e, 0xff), null, "COMBO ×67! 🌸", 105),
-            (Color.FromRgb(0xff, 0x6b, 0xb5), Color.FromRgb(0x38, 0xbf, 0xf8), "COMBO ×75! 🌈", 110),
-            (Color.FromRgb(0xff, 0xeb, 0x3b), Color.FromRgb(0xff, 0xa0, 0x00), "COMBO ×82! 👑", 115),
-            (Color.FromRgb(0x7c, 0x3a, 0xed), Color.FromRgb(0xec, 0x4e, 0xff), "COMBO ×90! ⚡💜", 120),
-            (Color.FromRgb(0xff, 0x45, 0x00), Color.FromRgb(0xff, 0xd7, 0x00), "COMBO ×97! 🔥👑", 125),
-            (Color.FromRgb(0x00, 0xff, 0xff), Color.FromRgb(0x00, 0x80, 0xff), "COMBO ×105! ❄️", 130),
-            (Color.FromRgb(0xff, 0xff, 0xff), Color.FromRgb(0xff, 0x6b, 0xb5), "COMBO ×112! 🌟", 135),
-            (Color.FromRgb(0xff, 0xd7, 0x00), Color.FromRgb(0xff, 0x45, 0x00), "COMBO ×120! 🔥🌟", 138),
-            (Color.FromRgb(0x00, 0xff, 0x88), Color.FromRgb(0x00, 0xcc, 0xff), "COMBO ×150! 💎", 140),
-            (Color.FromRgb(0xff, 0x00, 0xff), Color.FromRgb(0xff, 0xff, 0x00), "COMBO ×200! 👑⚡", 145),
-            (Color.FromRgb(0xff, 0x45, 0x00), Color.FromRgb(0x7c, 0x3a, 0xed), "COMBO ×220! 🔥💜", 148),
-            (Color.FromRgb(0x00, 0xff, 0xff), Color.FromRgb(0xff, 0x00, 0xff), "COMBO ×250! ❄️🌸", 150),
-            (Color.FromRgb(0xff, 0xff, 0xff), Color.FromRgb(0xff, 0xd7, 0x00), "MAX COMBO ×300!! 🌟✨🔥", 155),
-        };
-
-        var oldAuras = GamePlayView.Children
-            .OfType<System.Windows.Shapes.Rectangle>()
-            .Where(r => r.Tag?.ToString() == "combo_aura").ToList();
-        _auroraGameTimer?.Stop();
-        foreach (var old in oldAuras)
-        {
-            var fo = new DoubleAnimation(old.Opacity, 0, TimeSpan.FromMilliseconds(500))
-                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-            fo.Completed += (_, _) => GamePlayView.Children.Remove(old);
-            old.BeginAnimation(UIElement.OpacityProperty, fo);
-        }
-
-        if (newLevel == 0) return;
-
-        var (mainColor, accentColor, announceText, alpha) = levels[newLevel - 1];
-        Color c = mainColor;
-        _currentComboColor = mainColor;
-
-        var vignette = new System.Windows.Shapes.Rectangle
-        {
-            Tag = "combo_aura",
-            IsHitTestVisible = false,
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch,
-            Opacity = 0
-        };
-
-        var stops = new GradientStopCollection();
-
-        if (newLevel >= 10 && accentColor.HasValue)
-        {
-            stops.Add(new GradientStop(Color.FromArgb((byte)(alpha * 0.15), accentColor.Value.R, accentColor.Value.G, accentColor.Value.B), 0.00));
-            stops.Add(new GradientStop(Color.FromArgb((byte)(alpha * 0.08), accentColor.Value.R, accentColor.Value.G, accentColor.Value.B), 0.35));
-            stops.Add(new GradientStop(Color.FromArgb(0, c.R, c.G, c.B), 0.45));
-            stops.Add(new GradientStop(Color.FromArgb((byte)(alpha * 0.25), c.R, c.G, c.B), 0.60));
-            stops.Add(new GradientStop(Color.FromArgb((byte)(alpha * 0.50), c.R, c.G, c.B), 0.75));
-            stops.Add(new GradientStop(Color.FromArgb((byte)(alpha * 0.75), c.R, c.G, c.B), 0.88));
-            stops.Add(new GradientStop(Color.FromArgb(alpha, c.R, c.G, c.B), 1.00));
-        }
-        else
-        {
-            stops.Add(new GradientStop(Color.FromArgb(0, c.R, c.G, c.B), 0.00));
-            stops.Add(new GradientStop(Color.FromArgb(0, c.R, c.G, c.B), 0.45));
-            stops.Add(new GradientStop(Color.FromArgb((byte)(alpha * 0.20), c.R, c.G, c.B), 0.60));
-            stops.Add(new GradientStop(Color.FromArgb((byte)(alpha * 0.45), c.R, c.G, c.B), 0.75));
-            stops.Add(new GradientStop(Color.FromArgb((byte)(alpha * 0.70), c.R, c.G, c.B), 0.88));
-            stops.Add(new GradientStop(Color.FromArgb(alpha, c.R, c.G, c.B), 1.00));
-        }
-
-        vignette.Fill = new RadialGradientBrush(stops)
-        {
-            ColorInterpolationMode = ColorInterpolationMode.ScRgbLinearInterpolation,
-            Center = new System.Windows.Point(0.5, 0.5),
-            GradientOrigin = new System.Windows.Point(0.5, 0.5),
-            RadiusX = 0.85, RadiusY = 0.85
-        };
-
-        GamePlayView.Children.Add(vignette);
-
-        vignette.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(600))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-
-        double pulse = 0;
-        double speed = 0.025 + newLevel * 0.010;
-        double ampli = 0.15 + newLevel * 0.010;
-
-        _auroraGameTimer = new DispatcherTimer(DispatcherPriority.Background)
-            { Interval = TimeSpan.FromMilliseconds(40) };
-        _auroraGameTimer.Tick += (_, _) =>
-        {
-            pulse += speed;
-            double p = 1.0 - ampli + Math.Sin(pulse) * ampli;
-            vignette.Opacity = p;
-        };
-        _auroraGameTimer.Start();
-
-        if (newLevel >= 4) StartStarBurst(c, Math.Min(newLevel - 3, 4));
-
-        SpawnComboAnnounce(newLevel, c, announceText);
-    }
-
-    private void StartStarBurst(Color color, int level)
-    {
-        _starTimer?.Stop();
-
-        _starBurst = level >= 12 ? 20 : (level >= 3 ? 12 : 8);
-
-        var rng = new Random();
-        _starTimer = new DispatcherTimer(DispatcherPriority.Background)
-            { Interval = TimeSpan.FromMilliseconds(level >= 12 ? 80 : (level >= 3 ? 130 : 190)) };
-
-        _starTimer.Tick += (_, _) =>
-        {
-            if (_starBurst <= 0 || _lastComboAuraLevel < 2)
-            {
-                _starTimer?.Stop();
-                return;
-            }
-            _starBurst--;
-
-            int count = level >= 12 ? 10 : (level >= 3 ? 6 : 3);
-            double viewWidth  = GameCanvas.ActualWidth;
-            double viewHeight = GameCanvas.ActualHeight;
-
-            for (int i = 0; i < count; i++)
-            {
-                double startX = rng.NextDouble() * viewWidth;
-                double startY = viewHeight + 10;
-                double endX   = startX + rng.Next(-80, 80);
-                double endY   = rng.Next((int)(viewHeight * 0.2), (int)(viewHeight * 0.7));
-                double size   = rng.Next(6, level >= 3 ? 18 : 14);
-                double dur    = 1200 + rng.Next(0, 600);
-
-                Color starColor;
-                if (color.R >= 250 && color.G >= 250 && color.B >= 250)
-                {
-                    var rainbowColors = new[]
-                    {
-                        Color.FromRgb(0xff, 0x6b, 0xb5),
-                        Color.FromRgb(0xff, 0xd7, 0x00),
-                        Color.FromRgb(0x00, 0xff, 0xff),
-                        Color.FromRgb(0xff, 0x45, 0x00),
-                        Color.FromRgb(0xec, 0x4e, 0xff),
-                        Color.FromRgb(0x22, 0xc5, 0x5e),
-                    };
-                    starColor = rainbowColors[rng.Next(rainbowColors.Length)];
-                }
-                else
-                {
-                    starColor = Color.FromArgb(
-                        (byte)rng.Next(200, 255),
-                        (byte)Math.Min(255, color.R + 40),
-                        (byte)Math.Min(255, color.G + 40),
-                        (byte)Math.Min(255, color.B + 40));
-                }
-
-                var star = new TextBlock
-                {
-                    Text = StarChars[rng.Next(StarChars.Length)],
-                    FontSize = size,
-                    Foreground = new SolidColorBrush(starColor),
-                    IsHitTestVisible = false,
-                    RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
-                    RenderTransform = new TransformGroup
-                    {
-                        Children =
-                        {
-                            new TranslateTransform(),
-                            new RotateTransform(),
-                            new ScaleTransform(0.3, 0.3)
-                        }
-                    }
-                };
-
-                Canvas.SetLeft(star, startX);
-                Canvas.SetTop(star, endY);
-                GameCanvas.Children.Add(star);
-
-                var tg        = (TransformGroup)star.RenderTransform;
-                var translate = (TranslateTransform)tg.Children[0];
-                var rotate    = (RotateTransform)tg.Children[1];
-                var scale     = (ScaleTransform)tg.Children[2];
-
-                var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-                var moveX = new DoubleAnimation(endX - startX, 0,
-                    TimeSpan.FromMilliseconds(dur)) { EasingFunction = easeOut };
-                var moveY = new DoubleAnimation(startY - endY, 0,
-                    TimeSpan.FromMilliseconds(dur)) { EasingFunction = easeOut };
-
-                var spin = new DoubleAnimation(0, rng.Next(90, 270),
-                    TimeSpan.FromMilliseconds(dur));
-
-                var scaleAnim = new DoubleAnimationUsingKeyFrames();
-                scaleAnim.KeyFrames.Add(new LinearDoubleKeyFrame(0.3, KeyTime.FromPercent(0)));
-                scaleAnim.KeyFrames.Add(new EasingDoubleKeyFrame(1.2, KeyTime.FromPercent(0.35),
-                    new CubicEase { EasingMode = EasingMode.EaseOut }));
-                scaleAnim.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(1.0),
-                    new CubicEase { EasingMode = EasingMode.EaseIn }));
-                scaleAnim.Duration = TimeSpan.FromMilliseconds(dur);
-
-                var fade = new DoubleAnimation(1, 0,
-                    TimeSpan.FromMilliseconds(dur * 0.4))
-                    { BeginTime = TimeSpan.FromMilliseconds(dur * 0.6) };
-                fade.Completed += (_, _) => GameCanvas.Children.Remove(star);
-
-                translate.BeginAnimation(TranslateTransform.XProperty, moveX);
-                translate.BeginAnimation(TranslateTransform.YProperty, moveY);
-                rotate.BeginAnimation(RotateTransform.AngleProperty, spin);
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleAnim);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleAnim.Clone());
-                star.BeginAnimation(UIElement.OpacityProperty, fade);
-            }
-        };
-
-        _starTimer.Start();
-    }
-
-    private void CheckGameEvents()
-    {
-        if (_gameOverTriggered) return;
-        int totalPlayed = _hitNotes + _missCount;
-
-        if (!_halfwayTriggered && _totalNotes > 0 && totalPlayed >= _totalNotes / 2)
-        {
-            _halfwayTriggered = true;
-            SpawnMilestoneAnnounce("ПОЛПУТИ! 🎯", Color.FromRgb(0x06, 0xb6, 0xd4));
-            FlashScreenOnce(Color.FromArgb(30, 0x06, 0xb6, 0xd4), 800);
-        }
-
-        int livesLeft = 10 - _missCount;
-        bool danger = livesLeft <= 3 && livesLeft > 0 && !_gameOverTriggered;
-        if (danger && !_dangerModeActive)
-        {
-            _dangerModeActive = true;
-            StartDangerMode();
-        }
-        else if (!danger && _dangerModeActive)
-        {
-            _dangerModeActive = false;
-            StopDangerMode();
-        }
-    }
-
-    private void SpawnMilestoneAnnounce(string text, Color color)
-    {
-        var tb = new TextBlock
-        {
-            Text = text,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 18,
-            FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(color),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            IsHitTestVisible = false,
-            Opacity = 0,
-            Margin = new Thickness(0, 120, 0, 0),
-            RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
-            RenderTransform = new ScaleTransform(0.7, 0.7),
-            Effect = new System.Windows.Media.Effects.DropShadowEffect
-                { Color = color, BlurRadius = 16, ShadowDepth = 0, Opacity = 1 }
-        };
-        GamePlayView.Children.Add(tb);
-
-        var st = (ScaleTransform)tb.RenderTransform;
-        tb.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(250)));
-        st.BeginAnimation(ScaleTransform.ScaleXProperty,
-            new DoubleAnimation(0.7, 1.05, TimeSpan.FromMilliseconds(300))
-            { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } });
-        st.BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(0.7, 1.05, TimeSpan.FromMilliseconds(300))
-            { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } });
-
-        var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(600))
-            { BeginTime = TimeSpan.FromMilliseconds(2000) };
-        fadeOut.Completed += (_, _) => GamePlayView.Children.Remove(tb);
-        tb.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-    }
-
-    private void FlashScreenOnce(Color color, int durationMs)
-    {
-        var flash = new System.Windows.Shapes.Rectangle
-        {
-            Fill = new SolidColorBrush(color),
-            IsHitTestVisible = false,
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch,
-            Opacity = 0
-        };
-        GamePlayView.Children.Add(flash);
-
-        var up = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(durationMs * 0.3));
-        var down = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(durationMs * 0.7))
-            { BeginTime = TimeSpan.FromMilliseconds(durationMs * 0.3) };
-        down.Completed += (_, _) => GamePlayView.Children.Remove(flash);
-        flash.BeginAnimation(UIElement.OpacityProperty, up);
-        flash.BeginAnimation(UIElement.OpacityProperty, down);
-    }
-
-    private void StartDangerMode()
-    {
-        SpawnMilestoneAnnounce("⚠️ ОСТОРОЖНО!", Color.FromRgb(0xef, 0x44, 0x44));
-
-        var danger = new System.Windows.Shapes.Rectangle
-        {
-            Tag = "danger_vignette",
-            IsHitTestVisible = false,
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch,
-            Opacity = 0
-        };
-
-        danger.Fill = new RadialGradientBrush(new GradientStopCollection
-        {
-            new GradientStop(Color.FromArgb(0,   0xef, 0x44, 0x44), 0.00),
-            new GradientStop(Color.FromArgb(0,   0xef, 0x44, 0x44), 0.45),
-            new GradientStop(Color.FromArgb(15,  0xef, 0x44, 0x44), 0.60),
-            new GradientStop(Color.FromArgb(35,  0xef, 0x44, 0x44), 0.75),
-            new GradientStop(Color.FromArgb(60,  0xef, 0x44, 0x44), 0.88),
-            new GradientStop(Color.FromArgb(80,  0xef, 0x44, 0x44), 1.00),
-        })
-        {
-            ColorInterpolationMode = ColorInterpolationMode.ScRgbLinearInterpolation,
-            Center = new System.Windows.Point(0.5, 0.5),
-            GradientOrigin = new System.Windows.Point(0.5, 0.5),
-            RadiusX = 0.85, RadiusY = 0.85
-        };
-
-        GamePlayView.Children.Add(danger);
-
-        _dangerPulseTimer?.Stop();
-        double dp = 0;
-        _dangerPulseTimer = new DispatcherTimer(DispatcherPriority.Background)
-            { Interval = TimeSpan.FromMilliseconds(50) };
-        _dangerPulseTimer.Tick += (_, _) =>
-        {
-            dp += 0.08;
-            danger.Opacity = 0.5 + Math.Sin(dp) * 0.5;
-        };
-        _dangerPulseTimer.Start();
-    }
-
-    private void StopDangerMode()
-    {
-        _dangerPulseTimer?.Stop();
-        _dangerPulseTimer = null;
-
-        var vigsToRemove = GamePlayView.Children.OfType<System.Windows.Shapes.Rectangle>()
-            .Where(r => r.Tag?.ToString() == "danger_vignette").ToList();
-        foreach (var v in vigsToRemove)
-        {
-            var fo = new DoubleAnimation(v.Opacity, 0, TimeSpan.FromMilliseconds(500));
-            fo.Completed += (_, _) => GamePlayView.Children.Remove(v);
-            v.BeginAnimation(UIElement.OpacityProperty, fo);
-        }
-    }
-
-    private void SpawnComboAnnounce(int level, Color color, string text)
-    {
-        double fontSize = Math.Min(14 + level * 1.2, 32);
-
-        var announce = new TextBlock
-        {
-            Text = text,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = fontSize,
-            FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(color),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            IsHitTestVisible = false,
-            Opacity = 0,
-            RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
-            RenderTransform = new ScaleTransform(0.5, 0.5),
-            Margin = new Thickness(0, level >= 8 ? 55 : 75, 0, 0),
-            Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                Color = color,
-                BlurRadius = 8 + level * 2,
-                ShadowDepth = 0,
-                Opacity = 0.9
-            }
-        };
-        GamePlayView.Children.Add(announce);
-
-        double amplitude = 0.25 + Math.Min(level * 0.05, 0.4);
-        double peakScale = 1.0 + amplitude;
-        var st = (ScaleTransform)announce.RenderTransform;
-
-        announce.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)));
-        st.BeginAnimation(ScaleTransform.ScaleXProperty,
-            new DoubleAnimation(0.5, peakScale, TimeSpan.FromMilliseconds(300))
-            { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = amplitude } });
-        st.BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(0.5, peakScale, TimeSpan.FromMilliseconds(300))
-            { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = amplitude } });
-
-        var scaleBack = new DoubleAnimation(peakScale, 1.0, TimeSpan.FromMilliseconds(200))
-            { BeginTime = TimeSpan.FromMilliseconds(300) };
-        st.BeginAnimation(ScaleTransform.ScaleXProperty, scaleBack);
-        st.BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(peakScale, 1.0, TimeSpan.FromMilliseconds(200))
-            { BeginTime = TimeSpan.FromMilliseconds(300) });
-
-        int holdMs = 1400 + Math.Min(level * 60, 600);
-        var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(350))
-            { BeginTime = TimeSpan.FromMilliseconds(holdMs) };
-        fadeOut.Completed += (_, _) => GamePlayView.Children.Remove(announce);
-        announce.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-    }
-
-    private void ShowJudge(string text, Color color)
-    {
-        if (text == "MISS")
-        {
-            JudgeText.Text = "MISS";
-            JudgeText.Foreground = new SolidColorBrush(Color.FromArgb(180, 0x88, 0x88, 0x88));
-            JudgeText.Opacity = 1;
-            _judgeVisibleUntil = _gameClock.Elapsed.TotalSeconds + 0.35;
-        }
-    }
-
-    private void FlashHitZone(int lane)
-    {
-        SetHitZoneOpacity(lane, 0.45);
-        _hitZoneFlashUntil[lane] = _gameClock.Elapsed.TotalSeconds + 0.08;
-    }
-
-    private void SpawnHitEffect(int lane, string judge)
-    {
-        double canvasH = GameCanvas.ActualHeight > 0 ? GameCanvas.ActualHeight : 500;
-        double hitY = canvasH - 70;
-        double centerX = GetLaneCenterX(lane);
-        double centerY = hitY + (NOTE_SIZE / 2);
-
-        var flash = new Ellipse
-        {
-            Width = 60,
-            Height = 60,
-            Fill = new RadialGradientBrush(
-                Color.FromArgb(200, LaneColors[lane].R, LaneColors[lane].G, LaneColors[lane].B),
-                Color.FromArgb(0, LaneColors[lane].R, LaneColors[lane].G, LaneColors[lane].B)),
-            IsHitTestVisible = false,
-            RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
-            RenderTransform = new ScaleTransform(0.2, 0.2)
-        };
-        Canvas.SetLeft(flash, centerX - 30);
-        Canvas.SetTop(flash, centerY - 30);
-        GameCanvas.Children.Add(flash);
-
-        var scaleX = new DoubleAnimation(0.2, 2.2, TimeSpan.FromMilliseconds(350))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-        var scaleY = new DoubleAnimation(0.2, 2.2, TimeSpan.FromMilliseconds(350))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-        var fadeFlash = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(350));
-        fadeFlash.Completed += (_, _) => GameCanvas.Children.Remove(flash);
-        ((ScaleTransform)flash.RenderTransform).BeginAnimation(ScaleTransform.ScaleXProperty, scaleX);
-        ((ScaleTransform)flash.RenderTransform).BeginAnimation(ScaleTransform.ScaleYProperty, scaleY);
-        flash.BeginAnimation(UIElement.OpacityProperty, fadeFlash);
-
-        var ring = new Ellipse
-        {
-            Width = 50,
-            Height = 50,
-            Stroke = new SolidColorBrush(Color.FromArgb(180, LaneColors[lane].R, LaneColors[lane].G, LaneColors[lane].B)),
-            StrokeThickness = 2,
-            Fill = Brushes.Transparent,
-            IsHitTestVisible = false,
-            RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
-            RenderTransform = new ScaleTransform(1, 1)
-        };
-        Canvas.SetLeft(ring, centerX - 25);
-        Canvas.SetTop(ring, centerY - 25);
-        GameCanvas.Children.Add(ring);
-
-        var ringScale = new DoubleAnimation(1, 2.8, TimeSpan.FromMilliseconds(450))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-        var fadeRing = new DoubleAnimation(0.8, 0, TimeSpan.FromMilliseconds(450));
-        fadeRing.Completed += (_, _) => GameCanvas.Children.Remove(ring);
-        ((ScaleTransform)ring.RenderTransform).BeginAnimation(ScaleTransform.ScaleXProperty, ringScale);
-        ((ScaleTransform)ring.RenderTransform).BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(1, 2.8, TimeSpan.FromMilliseconds(450))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-        ring.BeginAnimation(UIElement.OpacityProperty, fadeRing);
-
-        var rng = new Random();
-        int particleCount = judge == "PERFECT" ? 8 : 5;
-        for (int p = 0; p < particleCount; p++)
-        {
-            double angle = (p * 360.0 / particleCount) + rng.Next(-15, 15);
-            double rad = angle * Math.PI / 180.0;
-            double dist = 35 + rng.Next(15, 35);
-            double size = judge == "PERFECT" ? rng.Next(5, 9) : rng.Next(3, 7);
-
-            var particle = new Ellipse
-            {
-                Width = size,
-                Height = size,
-                Fill = new SolidColorBrush(LaneColors[lane]),
-                IsHitTestVisible = false,
-                RenderTransform = new TranslateTransform()
-            };
-            Canvas.SetLeft(particle, centerX - size / 2);
-            Canvas.SetTop(particle, centerY - size / 2);
-            GameCanvas.Children.Add(particle);
-
-            var tx = new DoubleAnimation(0, Math.Cos(rad) * dist, TimeSpan.FromMilliseconds(420))
-                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-            var ty = new DoubleAnimation(0, Math.Sin(rad) * dist - 15, TimeSpan.FromMilliseconds(420))
-                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-            var fadeP = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(420));
-            fadeP.Completed += (_, _) => GameCanvas.Children.Remove(particle);
-
-            ((TranslateTransform)particle.RenderTransform).BeginAnimation(TranslateTransform.XProperty, tx);
-            ((TranslateTransform)particle.RenderTransform).BeginAnimation(TranslateTransform.YProperty, ty);
-            particle.BeginAnimation(UIElement.OpacityProperty, fadeP);
-        }
-
-        if (judge == "PERFECT" || judge == "GOOD")
-        {
-            var judgeColor = judge == "PERFECT" ? LaneColors[lane] : Color.FromRgb(0xa1, 0xa1, 0xaa);
-            var floatText = new TextBlock
-            {
-                Text = judge,
-                FontFamily = new FontFamily("Segoe UI"),
-                FontSize = judge == "PERFECT" ? 16 : 13,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(judgeColor),
-                IsHitTestVisible = false,
-                Effect = new System.Windows.Media.Effects.DropShadowEffect
-                {
-                    Color = judgeColor,
-                    BlurRadius = 12,
-                    ShadowDepth = 0,
-                    Opacity = 0.9
-                }
-            };
-
-            floatText.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
-            Canvas.SetLeft(floatText, centerX - floatText.DesiredSize.Width / 2);
-            Canvas.SetTop(floatText, hitY - 15);
-            GameCanvas.Children.Add(floatText);
-
-            var moveUp = new DoubleAnimation(hitY - 15, hitY - 65, TimeSpan.FromMilliseconds(650))
-                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-            var fadeText = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(650));
-            fadeText.Completed += (_, _) => GameCanvas.Children.Remove(floatText);
-
-            floatText.BeginAnimation(Canvas.TopProperty, moveUp);
-            floatText.BeginAnimation(UIElement.OpacityProperty, fadeText);
-        }
-    }
-
-    private void SetHitZoneOpacity(int lane, double opacity)
-    {
-        foreach (var child in GameCanvas.Children.OfType<Border>())
-        {
-            if (Math.Abs(Canvas.GetLeft(child) - GetLaneLeft(lane)) < 1 && child.Tag == null)
-            {
-                child.Opacity = opacity;
-                break;
-            }
-        }
-    }
-
-    private void GameOver(bool failed = false)
-    {
-        CompositionTarget.Rendering -= GameTick;
-        PreviewKeyDown -= Game_KeyDown;
-        PreviewKeyUp -= Game_KeyUp;
-        _activeLanes.Clear();
-        _hitLanesThisFrame.Clear();
-        _editorPlayer.Stop();
-        _gameClock.Stop();
-        _auroraGameTimer?.Stop();
-
-        int acc = _totalNotes > 0 ? (int)((double)_hitNotes / _totalNotes * 100) : 100;
-        string rank = failed ? "F" : acc >= 95 ? "S" : acc >= 85 ? "A" : acc >= 70 ? "B" : acc >= 50 ? "C" : "D";
-
-        _discordGameTimer?.Stop();
-        _discordGameTimer = null;
-        _discord.SetGameResults(_currentTrackTitle, rank, _gameScore, acc, _maxCombo);
-
-        var existing = _settings.TrackHistory
-            .FirstOrDefault(x => x.TrackTitle == _currentTrackTitle);
-        if (existing is null)
-        {
-            existing = new GameTrackStats
-            {
-                TrackTitle = _currentTrackTitle ?? "Unknown",
-                FirstPlayed = DateTime.Now
-            };
-            _settings.TrackHistory.Add(existing);
-        }
-
-        existing.TimesPlayed++;
-        existing.LastPlayed = DateTime.Now;
-        existing.TotalHits += _hitNotes;
-        existing.TotalMisses += _missCount;
-        existing.TotalNotes += _totalNotes;
-        existing.TotalKeyPresses += _hitNotes + _missCount;
-        if (_gameScore > existing.BestScore) existing.BestScore = _gameScore;
-        if (_gameScore < existing.MinScore) existing.MinScore = _gameScore;
-        if (acc > existing.BestAccuracy) existing.BestAccuracy = Math.Round((double)acc, 1);
-        if (acc < existing.WorstAccuracy) existing.WorstAccuracy = Math.Round((double)acc, 1);
-        if (_maxCombo > existing.BestCombo) existing.BestCombo = _maxCombo;
-        string[] rankOrder = ["S", "A", "B", "C", "D", "F"];
-        if (Array.IndexOf(rankOrder, rank) < Array.IndexOf(rankOrder, existing.BestRank))
-            existing.BestRank = rank;
-
-        SettingsService.Save(_settings);
-
-
-        Color rankColor = rank switch
-        {
-            "S" => Color.FromRgb(0xff, 0xd7, 0x00),
-            "A" => Color.FromRgb(0x22, 0xc5, 0x5e),
-            "B" => Color.FromRgb(0x3b, 0x82, 0xf6),
-            "C" => Color.FromRgb(0xf5, 0x9e, 0x0b),
-            "D" => Color.FromRgb(0x88, 0x88, 0x88),
-            "F" => Color.FromRgb(0xef, 0x44, 0x44),
-            _ => Color.FromRgb(0x88, 0x88, 0x88)
-        };
-
-        var overlay = new Border
-        {
-            Tag = "game_results_overlay",
-            Background = new SolidColorBrush(Color.FromArgb(220, 0x05, 0x05, 0x0f)),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch,
-            Opacity = 0
-        };
-
-        var auroraBg = new System.Windows.Shapes.Rectangle
-        {
-            IsHitTestVisible = false,
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch
-        };
-        auroraBg.Fill = new RadialGradientBrush(new GradientStopCollection
-        {
-            new GradientStop(Color.FromArgb(60, rankColor.R, rankColor.G, rankColor.B), 0),
-            new GradientStop(Color.FromArgb(20, rankColor.R, rankColor.G, rankColor.B), 0.5),
-            new GradientStop(Color.FromArgb(0, rankColor.R, rankColor.G, rankColor.B), 1),
-        })
-        { Center = new System.Windows.Point(0.5, 0.4), GradientOrigin = new System.Windows.Point(0.5, 0.4), RadiusX = 0.7, RadiusY = 0.6 };
-
-        var content = new StackPanel
-        {
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            Opacity = 0,
-            RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
-            RenderTransform = new TranslateTransform(0, 30)
-        };
-
-        var headerText = new TextBlock
-        {
-            Text = failed ? "ПРОВАЛ" : "РЕЗУЛЬТАТЫ",
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 14,
-            FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(Color.FromArgb(150, 0xff, 0xff, 0xff)),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 16)
-        };
-        content.Children.Add(headerText);
-
-        var rankBorder = new Border
-        {
-            Width = 120, Height = 120,
-            CornerRadius = new CornerRadius(60),
-            BorderBrush = new SolidColorBrush(rankColor),
-            BorderThickness = new Thickness(3),
-            Background = new SolidColorBrush(Color.FromArgb(30, rankColor.R, rankColor.G, rankColor.B)),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 20),
-            Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                Color = rankColor, BlurRadius = 30, ShadowDepth = 0, Opacity = 0.8
-            },
-            RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
-            RenderTransform = new ScaleTransform(0, 0)
-        };
-        rankBorder.Child = new TextBlock
-        {
-            Text = rank,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 56,
-            FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(rankColor),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        content.Children.Add(rankBorder);
-
-        var statsGrid = new Grid { Margin = new Thickness(0, 0, 0, 24) };
-        statsGrid.ColumnDefinitions.Add(new ColumnDefinition());
-        statsGrid.ColumnDefinitions.Add(new ColumnDefinition());
-        statsGrid.ColumnDefinitions.Add(new ColumnDefinition());
-        statsGrid.RowDefinitions.Add(new RowDefinition());
-        statsGrid.RowDefinitions.Add(new RowDefinition());
-
-        void AddStat(int col, int row, string label, string value, Color color)
-        {
-            var card = new Border
-            {
-                Background = new SolidColorBrush(Color.FromArgb(80, 0x25, 0x25, 0x25)),
-                CornerRadius = new CornerRadius(12),
-                Padding = new Thickness(16, 12, 16, 12),
-                Margin = new Thickness(4),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(100, 0x33, 0x33, 0x33)),
-                BorderThickness = new Thickness(1)
-            };
-            var sp = new StackPanel { HorizontalAlignment = System.Windows.HorizontalAlignment.Center };
-            sp.Children.Add(new TextBlock
-            {
-                Text = label, FontFamily = new FontFamily("Segoe UI"), FontSize = 10,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                FontWeight = FontWeights.Bold
-            });
-            sp.Children.Add(new TextBlock
-            {
-                Text = value, FontFamily = new FontFamily("Segoe UI"), FontSize = 22,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(color),
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                Effect = new System.Windows.Media.Effects.DropShadowEffect
-                {
-                    Color = color, BlurRadius = 8, ShadowDepth = 0, Opacity = 0.6
-                }
-            });
-            card.Child = sp;
-            Grid.SetColumn(card, col);
-            Grid.SetRow(card, row);
-            statsGrid.Children.Add(card);
-        }
-
-        int perfect = _hitNotes;
-        int misses = _missCount;
-        int maxCombo = _gameCombo;
-
-        AddStat(0, 0, "СЧЁТ", _gameScore.ToString("N0"), Color.FromRgb(0xff, 0xff, 0xff));
-        AddStat(1, 0, "ТОЧНОСТЬ", $"{acc}%", acc >= 90 ? Color.FromRgb(0x22, 0xc5, 0x5e) : Color.FromRgb(0xf5, 0x9e, 0x0b));
-        AddStat(2, 0, "КОМБО", $"{_gameCombo}x", Color.FromRgb(0x63, 0x66, 0xf1));
-        AddStat(0, 1, "ВСЕГО НОТ", _totalNotes.ToString(), Color.FromRgb(0xaa, 0xaa, 0xaa));
-        AddStat(1, 1, "ПОПАДАНИЙ", _hitNotes.ToString(), Color.FromRgb(0x22, 0xc5, 0x5e));
-        AddStat(2, 1, "ПРОМАХОВ", misses.ToString(), Color.FromRgb(0xef, 0x44, 0x44));
-
-        content.Children.Add(statsGrid);
-
-        string motivation = rank switch
-        {
-            "S" => "Абсолютное мастерство! 🌟",
-            "A" => "Отличная игра! 🔥",
-            "B" => "Хороший результат! 👍",
-            "C" => "Неплохо, но можно лучше",
-            "D" => "Тренируйся ещё!",
-            _ => failed ? "Слишком много промахов..." : "Продолжай пробовать!"
-        };
-
-        content.Children.Add(new TextBlock
-        {
-            Text = motivation,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 15,
-            Foreground = new SolidColorBrush(Color.FromArgb(200, 0xff, 0xff, 0xff)),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 28)
-        });
-
-        var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Center };
-
-        var retryBtn = new Button
-        {
-            Content = "▶  Ещё раз",
-            Style = (Style)FindResource("AccentBtn"),
-            Width = 130, Height = 42,
-            Margin = new Thickness(0, 0, 10, 0),
-            FontSize = 14
-        };
-        retryBtn.Click += (_, _) =>
-        {
-            GamePlayView.Children.Remove(overlay);
-
-            _isInGame = false;
-            _discord.IsPriorityMode = false;
-
-            if (_lastGameNotes != null && _lastGameTitle != null)
-            {
-                StartGame(_lastGameNotes, _lastGameMp3Path, _lastGameTitle, _lastGameBpm);
-            }
-            else
-            {
-                ShowGameView(GameTrackSelectView);
-                StopGame();
-            }
-        };
-
-        var menuBtn = new Button
-        {
-            Content = "В меню",
-            Style = (Style)FindResource("OutlineBtn"),
-            Width = 110, Height = 42,
-            FontSize = 14,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xf0, 0xf0, 0xf0))
-        };
-        menuBtn.Click += (_, _) =>
-        {
-            GamePlayView.Children.Remove(overlay);
-
-            _isInGame = false;
-            _discord.IsPriorityMode = false;
-
-            StopGame();
-            ShowGameView(GameMenuView);
-        };
-
-        btnPanel.Children.Add(retryBtn);
-        btnPanel.Children.Add(menuBtn);
-        content.Children.Add(btnPanel);
-
-        var overlayGrid = new Grid();
-        overlayGrid.Children.Add(auroraBg);
-        overlayGrid.Children.Add(content);
-        overlay.Child = overlayGrid;
-        GamePlayView.Children.Add(overlay);
-
-        overlay.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(400)));
-        content.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(500)))
-            { BeginTime = TimeSpan.FromMilliseconds(200) });
-        ((TranslateTransform)content.RenderTransform).BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(30, 0, TimeSpan.FromMilliseconds(500))
-            {
-                BeginTime = TimeSpan.FromMilliseconds(200),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-            });
-
-        var rankScale = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(600))
-        {
-            BeginTime = TimeSpan.FromMilliseconds(400),
-            EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.5 }
-        };
-        ((ScaleTransform)rankBorder.RenderTransform).BeginAnimation(ScaleTransform.ScaleXProperty, rankScale);
-        ((ScaleTransform)rankBorder.RenderTransform).BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(600))
-            {
-                BeginTime = TimeSpan.FromMilliseconds(400),
-                EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.5 }
-            });
-    }
-
-    private void StopGame()
-    {
-        CompositionTarget.Rendering -= GameTick;
-        _gameTimer?.Stop();
-        _gameTimer = null;
-        PreviewKeyDown -= Game_KeyDown;
-        PreviewKeyUp -= Game_KeyUp;
-        _activeLanes.Clear();
-        _hitLanesThisFrame.Clear();
-        _editorPlayer.Stop();
-        _editorPlayer.SpeedRatio = 1.0;
-        _gameClock.Stop();
-        GameCanvas.Children.Clear();
-
-        _countdownTimer?.Stop();
-        _countdownTimer = null;
-        CountdownOverlay.Visibility = Visibility.Collapsed;
-
-        _auroraGameTimer?.Stop();
-        _auroraGameTimer = null;
-        _lastComboAuraLevel = 0;
-
-        _effectTimer?.Stop();
-        _effectTimer = null;
-        while (_effectQueue.TryDequeue(out _)) { }
-
-        _starTimer?.Stop();
-        _starTimer = null;
-
-        _dangerPulseTimer?.Stop();
-        _dangerPulseTimer = null;
-        _halfwayTriggered = false;
-        _dangerModeActive = false;
-        _perfectStreak = 0;
-
-        _discordGameTimer?.Stop();
-        _discordGameTimer = null;
-        _isInGame = false;
-        _discord.IsPriorityMode = false;
-        _discord.SetMainMenu();
-
-        var vigs = GamePlayView.Children.OfType<System.Windows.Shapes.Rectangle>()
-            .Where(r => r.Tag?.ToString() == "danger_vignette").ToList();
-        foreach (var v in vigs) GamePlayView.Children.Remove(v);
-
-        var auras = GamePlayView.Children.OfType<System.Windows.Shapes.Rectangle>()
-            .Where(r => r.Tag?.ToString() == "combo_aura").ToList();
-        foreach (var aura in auras)
-        {
-            var fadeOut = new DoubleAnimation(aura.Opacity, 0, TimeSpan.FromMilliseconds(600));
-            fadeOut.Completed += (_, _) => GamePlayView.Children.Remove(aura);
-            aura.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-        }
-
-        var resultsOverlays = GamePlayView.Children.OfType<Border>()
-            .Where(b => b.Tag?.ToString() == "game_results_overlay").ToList();
-        foreach (var overlay in resultsOverlays)
-        {
-            GamePlayView.Children.Remove(overlay);
-        }
-
-        if (!_gameOverlayActive)
-        {
-            ServicesBtn.IsEnabled = true;
-            FaqNavBtn.IsEnabled = true;
-            DiagNavBtn.IsEnabled = true;
-            SettingsBtn.IsEnabled = true;
-            ModsNavBtn.IsEnabled = true;
-        }
-
-        GameHeaderTitle.Text = "Мини-игра";
-        GameHUDPanel.Visibility = Visibility.Collapsed;
-    }
-
-    private void UserLevelCard_Click(object s, MouseButtonEventArgs e)
-    {
-        if ((s as Border)?.Tag is not NoteMap map) return;
-        var dir = System.IO.Path.Combine(LevelsDir, map.Title ?? "level");
-        var mp3 = System.IO.Path.Combine(dir, map.TrackFile ?? "track.mp3");
-        var bpm = map.Bpm > 0 ? map.Bpm : REFERENCE_BPM;
-        ShowGameView(GamePlayView);
-        StartGame(map.Notes, File.Exists(mp3) ? mp3 : null, map.Title ?? "Custom Level", bpm);
-    }
-
-    private void PlayUserLevel_Click(object s, RoutedEventArgs e)
-    {
-        e.Handled = true;
-        if ((s as Button)?.Tag is not NoteMap map) return;
-        var dir = System.IO.Path.Combine(LevelsDir, map.Title ?? "level");
-        var mp3 = System.IO.Path.Combine(dir, map.TrackFile ?? "track.mp3");
-        var bpm = map.Bpm > 0 ? map.Bpm : REFERENCE_BPM;
-        ShowGameView(GamePlayView);
-        StartGame(map.Notes, File.Exists(mp3) ? mp3 : null, map.Title ?? "Custom Level", bpm);
-    }
-
-    private void ExportUserLevel_Click(object s, RoutedEventArgs e)
-    {
-        e.Handled = true;
-        if ((s as Button)?.Tag is not NoteMap map) return;
-        var dir = System.IO.Path.Combine(LevelsDir, map.Title ?? "level");
-        var dlg = new Microsoft.Win32.SaveFileDialog
-        {
-            FileName = map.Title + "_export",
-            DefaultExt = ".zip",
-            Filter = "ZIP Archive|*.zip"
-        };
-        if (dlg.ShowDialog() != true) return;
-        ZipFile.CreateFromDirectory(dir, dlg.FileName);
-    }
-
-    private void ImportLevel_Click(object s, RoutedEventArgs e)
-    {
-        var dlg = new OpenFileDialog
-        {
-            Title = "Выбрать уровень",
-            Filter = "Уровни|*.zip;*.osz|ZIP архив NetFix|*.zip|osu!mania архив|*.osz",
-            DefaultExt = ".zip"
-        };
-        if (dlg.ShowDialog() != true) return;
-
-        var ext = Path.GetExtension(dlg.FileName).ToLowerInvariant();
-        if (ext == ".osz")
-        {
-            ShowNotification("Osu! файлы", "Для импорта .osz файлов используй раздел «Osu! режим»", isError: false, isWarning: true);
-            return;
-        }
-
-        try
-        {
-            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-            Directory.CreateDirectory(tempDir);
-            ZipFile.ExtractToDirectory(dlg.FileName, tempDir);
-
-            var notesJsonPath = Path.Combine(tempDir, "notes.json");
-            if (!File.Exists(notesJsonPath))
-            {
-                ShowNotification("Ошибка импорта", "Архив не содержит файл notes.json", isError: true);
-                Directory.Delete(tempDir, true);
-                return;
-            }
-            var json = File.ReadAllText(notesJsonPath);
-            var map = JsonSerializer.Deserialize<NoteMap>(json);
-            if (map is null || string.IsNullOrEmpty(map.Title))
-            {
-                ShowNotification("Ошибка импорта", "Некорректный формат notes.json", isError: true);
-                Directory.Delete(tempDir, true);
-                return;
-            }
-            FinishLevelImport(map, tempDir);
-        }
-        catch (Exception ex)
-        {
-            ShowNotification("Ошибка импорта", $"Не удалось импортировать трек: {ex.Message}", isError: true);
-        }
-    }
-
-    private void StartOszImport(string oszPath, bool isOsuMode = false)
-    {
-        try
-        {
-            var difficulties = new List<(string Name, string FileName, int KeyCount)>();
-
-            using (var archive = ZipFile.OpenRead(oszPath))
-            {
-                foreach (var entry in archive.Entries
-                    .Where(e => e.Name.EndsWith(".osu", StringComparison.OrdinalIgnoreCase)))
-                {
-                    string diffName = entry.Name;
-                    int keyCount = 4;
-                    int mode = -1;
-
-                    using var reader = new StreamReader(entry.Open());
-                    string? line;
-                    string section = "";
-                    while ((line = reader.ReadLine()) is not null)
-                    {
-                        line = line.Trim();
-                        if (line.StartsWith('[')) { section = line; continue; }
-                        if (section == "[General]" && line.StartsWith("Mode:"))
-                            int.TryParse(line["Mode:".Length..].Trim(), out mode);
-                        if (section == "[Difficulty]" && line.StartsWith("CircleSize:"))
-                            int.TryParse(line["CircleSize:".Length..].Trim(), out keyCount);
-                        if (section == "[Metadata]" && line.StartsWith("Version:"))
-                            diffName = line["Version:".Length..].Trim();
-                    }
-
-                    if (mode == 3)
-                        difficulties.Add((diffName, entry.Name, keyCount));
-                }
-            }
-
-            if (difficulties.Count == 0)
-            {
-                ShowNotification("Ошибка", "В архиве нет osu!mania карт (Mode=3)", isError: true);
-                return;
-            }
-
-            if (difficulties.Count == 1)
-            {
-                ExecuteOszImport(oszPath, difficulties[0].FileName, difficulties[0].KeyCount, isOsuMode);
-                return;
-            }
-
-            _pendingOszPath = oszPath;
-            _oszReturnView = OsuModeView.Visibility == Visibility.Visible
-                ? OsuModeView
-                : (UIElement)GameTrackSelectView;
-            ShowGameView(OszDifficultyView);
-            ShowOszDifficultyPicker(difficulties, isOsuMode);
-        }
-        catch (Exception ex)
-        {
-            ShowNotification("Ошибка импорта", ex.Message, isError: true);
-        }
-    }
-
-    private void ShowOszDifficultyPicker(List<(string Name, string FileName, int KeyCount)> difficulties, bool isOsuMode = false)
-    {
-        OszDifficultyPanel.Children.Clear();
-        OszDifficultySubtext.Text = $"{difficulties.Count} сложностей, выбери одну для импорта";
-
-        foreach (var diff in difficulties)
-        {
-            var captured = diff;
-            var btn = new Border
-            {
-                CornerRadius = new CornerRadius(10),
-                Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x1e, 0x1e)),
-                Margin = new Thickness(0, 0, 0, 8),
-                Cursor = Cursors.Hand
-            };
-            var inner = new Border
-            {
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(10),
-                Padding = new Thickness(16, 14, 16, 14)
-            };
-
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var nameBlock = new TextBlock
-            {
-                Text = captured.Name,
-                FontSize = 15, FontWeight = FontWeights.SemiBold,
-                FontFamily = new FontFamily("Segoe UI"),
-                Foreground = Brushes.White,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            Grid.SetColumn(nameBlock, 0);
-
-            var keysBlock = new TextBlock
-            {
-                Text = $"{captured.KeyCount}K",
-                FontSize = 13,
-                FontFamily = new FontFamily("Segoe UI"),
-                Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            Grid.SetColumn(keysBlock, 1);
-
-            grid.Children.Add(nameBlock);
-            grid.Children.Add(keysBlock);
-            inner.Child = grid;
-            btn.Child = inner;
-
-            btn.MouseEnter += (s, _) =>
-                ((Border)s).Background = new SolidColorBrush(Color.FromRgb(0x2a, 0x2a, 0x2a));
-            btn.MouseLeave += (s, _) =>
-                ((Border)s).Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x1e, 0x1e));
-            btn.MouseLeftButtonUp += (_, _) =>
-            {
-                OszDifficultyView.Visibility = Visibility.Collapsed;
-                (_oszReturnView ?? GameTrackSelectView).Visibility = Visibility.Visible;
-                if (_pendingOszPath is not null)
-                    ExecuteOszImport(_pendingOszPath, captured.FileName, captured.KeyCount, isOsuMode);
-            };
-
-            OszDifficultyPanel.Children.Add(btn);
-        }
-    }
-
-    private void ExecuteOszImport(string oszPath, string osuFileName, int keyCount, bool isOsuMode = false)
-    {
-        var tempDir = Path.Combine(Path.GetTempPath(), "NetFix_osu_" + Guid.NewGuid());
-        Directory.CreateDirectory(tempDir);
-
-        NoteMap? map = null;
-
-        try
-        {
-            string audioFilename = "audio.mp3";
-            string title = "Unknown", artist = "", version = "";
-            var notes = new List<NoteEntry>();
-
-            using (var archive = ZipFile.OpenRead(oszPath))
-            {
-                var osuEntry = archive.Entries.First(e =>
-                    e.Name.Equals(osuFileName, StringComparison.OrdinalIgnoreCase));
-
-                using (var reader = new StreamReader(osuEntry.Open()))
-                {
-                    string? line;
-                    string section = "";
-                    while ((line = reader.ReadLine()) is not null)
-                    {
-                        line = line.Trim();
-                        if (line.StartsWith('[')) { section = line; continue; }
-
-                        if (section == "[General]" && line.StartsWith("AudioFilename:"))
-                            audioFilename = line["AudioFilename:".Length..].Trim();
-                        else if (section == "[Metadata]")
-                        {
-                            if (line.StartsWith("Title:"))
-                                title = line["Title:".Length..].Trim();
-                            else if (line.StartsWith("Artist:"))
-                                artist = line["Artist:".Length..].Trim();
-                            else if (line.StartsWith("Version:"))
-                                version = line["Version:".Length..].Trim();
-                        }
-                        else if (section == "[HitObjects]" &&
-                                 line.Length > 0 && !line.StartsWith("//"))
-                        {
-                            var parts = line.Split(',');
-                            if (parts.Length < 3) continue;
-                            if (!int.TryParse(parts[0], out int x)) continue;
-                            if (!int.TryParse(parts[2], out int timeMs)) continue;
-
-                            int sourceLane = (int)Math.Floor((double)x * keyCount / 512.0);
-                            sourceLane = Math.Clamp(sourceLane, 0, keyCount - 1);
-
-                            int targetLane = keyCount > 1
-                                ? (int)Math.Round((double)sourceLane * 3.0 / (keyCount - 1))
-                                : 0;
-                            targetLane = Math.Clamp(targetLane, 0, 3);
-
-                            notes.Add(new NoteEntry { Time = timeMs / 1000.0, Lane = targetLane });
-                        }
-                    }
-                }
-
-                var audioEntry = archive.Entries.FirstOrDefault(e =>
-                    e.Name.Equals(audioFilename, StringComparison.OrdinalIgnoreCase));
-                if (audioEntry is null)
-                {
-                    Directory.Delete(tempDir, true);
-                    ShowNotification("Ошибка", $"Аудио '{audioFilename}' не найдено в архиве", isError: true);
-                    return;
-                }
-
-                var audioExt = Path.GetExtension(audioFilename).ToLowerInvariant();
-                var audioDestPath = Path.Combine(tempDir, "track" + audioExt);
-                audioEntry.ExtractToFile(audioDestPath);
-
-                if (audioExt == ".ogg")
-                {
-                    var ffmpegPath = Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe");
-                    if (!File.Exists(ffmpegPath))
-                    {
-                        Directory.Delete(tempDir, true);
-                        ShowNotification("FFmpeg не найден",
-                            "Положи ffmpeg.exe рядом с NetFix.exe для поддержки .ogg аудио",
-                            isError: true);
-                        return;
-                    }
-
-                    var mp3DestPath = Path.Combine(tempDir, "track.mp3");
-                    var psi = new ProcessStartInfo
-                    {
-                        FileName = ffmpegPath,
-                        Arguments = $"-i \"{audioDestPath}\" -q:a 2 \"{mp3DestPath}\"",
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardError = true
-                    };
-
-                    using var proc = Process.Start(psi)!;
-                    proc.WaitForExit(30_000);
-
-                    if (!File.Exists(mp3DestPath) || new FileInfo(mp3DestPath).Length == 0)
-                    {
-                        Directory.Delete(tempDir, true);
-                        ShowNotification("Ошибка конвертации",
-                            "FFmpeg не смог конвертировать аудио", isError: true);
-                        return;
-                    }
-
-                    File.Delete(audioDestPath);
-                    audioDestPath = mp3DestPath;
-                    audioExt = ".mp3";
-                }
-
-                var trackTitle = string.IsNullOrWhiteSpace(artist) ? title : $"{artist} - {title}";
-                if (!string.IsNullOrWhiteSpace(version))
-                    trackTitle += $" [{version}]";
-                trackTitle = string.Concat(trackTitle.Split(Path.GetInvalidFileNameChars()));
-
-                map = new NoteMap
-                {
-                    Title = trackTitle,
-                    Author = "osu!",
-                    TrackFile = Path.GetFileName(audioDestPath),
-                    Bpm = 160,
-                    Notes = RemoveLaneDuplicates(notes.OrderBy(n => n.Time).ToList())
-                };
-
-                File.WriteAllText(Path.Combine(tempDir, "notes.json"),
-                    JsonSerializer.Serialize(map, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
-
-                if (isOsuMode)
-                    File.WriteAllText(Path.Combine(tempDir, "source.osz.path"), oszPath);
-
-            }
-
-            if (isOsuMode && map is not null && map.NoteCount > 1100)
-            {
-                var m = map;
-                var tmp = tempDir;
-                ShowHighNoteCountDialog(ok =>
-                {
-                    if (ok)
-                        FinishLevelImport(m, tmp, isOsuMode);
-                    else
-                        try { Directory.Delete(tmp, true); } catch { }
-                });
-                return;
-            }
-
-            FinishLevelImport(map, tempDir, isOsuMode);
-        }
-        catch (Exception ex)
-        {
-            if (Directory.Exists(tempDir))
-                try { Directory.Delete(tempDir, true); } catch { }
-            ShowNotification("Ошибка импорта", ex.Message, isError: true);
-        }
-    }
-
-    private static List<NoteEntry> RemoveLaneDuplicates(List<NoteEntry> sorted)
-    {
-        const double minGap = 0.030;
-        double[] lastTime = [-999, -999, -999, -999];
-        var result = new List<NoteEntry>(sorted.Count);
-
-        foreach (var note in sorted)
-        {
-            if (note.Time - lastTime[note.Lane] >= minGap)
-            {
-                result.Add(note);
-                lastTime[note.Lane] = note.Time;
-            }
-        }
-        return result;
-    }
-
-    private void FinishLevelImport(NoteMap map, string tempDir, bool isOsuMode = false)
-    {
-        var baseDir = isOsuMode ? OsuLevelsDir : LevelsDir;
-        var targetDir = Path.Combine(baseDir, map.Title!);
-        if (Directory.Exists(targetDir))
-        {
-            ShowConfirmDialog("Уровень уже существует",
-                $"Уровень «{map.Title}» уже существует. Заменить его?",
-                confirmed =>
-                {
-                    if (!confirmed) { Directory.Delete(tempDir, true); return; }
-                    Directory.Delete(targetDir, true);
-                    Directory.Move(tempDir, targetDir);
-                    if (isOsuMode) LoadOsuLevelsList(); else LoadUserLevels();
-                    ShowNotification("Успешно", $"Трек «{map.Title}» импортирован", isError: false);
-                },
-                confirmText: "Заменить",
-            confirmIsDestructive: true);
-        }
-        else
-        {
-            if (!Directory.Exists(baseDir))
-                Directory.CreateDirectory(baseDir);
-            Directory.Move(tempDir, targetDir);
-            if (isOsuMode) LoadOsuLevelsList(); else LoadUserLevels();
-            ShowNotification("Успешно", $"Трек «{map.Title}» импортирован", isError: false);
-        }
-    }
-
-    private void OsuModeBtn_Click(object s, RoutedEventArgs e)
-    {
-        ShowGameView(OsuModeView);
-        CheckFfmpegStatus();
-        LoadOsuLevelsList();
-    }
-
-    private void OsuModeBtn_Loaded(object s, RoutedEventArgs e)
-    {
-        if (s is not Button btn) return;
-        if (btn.Template.FindName("GlowBorder", btn) is not Border border) return;
-
-        var brush = new LinearGradientBrush
-        {
-            StartPoint = new System.Windows.Point(0, 0.5),
-            EndPoint = new System.Windows.Point(1, 0.5)
-        };
-        brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xe8, 0x4d, 0x8a), 0.0));
-        brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xff, 0x9a, 0x5c), 0.5));
-        brush.GradientStops.Add(new GradientStop(Color.FromRgb(0xe8, 0x4d, 0x8a), 1.0));
-
-        var transform = new RotateTransform(0);
-        brush.RelativeTransform = transform;
-        border.Background = brush;
-
-        var anim = new DoubleAnimation(0, 360, new Duration(TimeSpan.FromSeconds(4)))
-        {
-            RepeatBehavior = RepeatBehavior.Forever
-        };
-        transform.BeginAnimation(RotateTransform.AngleProperty, anim);
-    }
-
-    private void OsuModeBackBtn_Click(object s, RoutedEventArgs e)
-    {
-        ShowGameView(GameTrackSelectView);
-    }
-
-    private void ImportOszBtn_Click(object s, RoutedEventArgs e)
-    {
-        var dlg = new OpenFileDialog
-        {
-            Title = "Выбрать osu!mania карту",
-            Filter = "osu! архив|*.osz",
-            DefaultExt = ".osz"
-        };
-        if (dlg.ShowDialog() != true) return;
-        StartOszImport(dlg.FileName, isOsuMode: true);
-    }
-
-    private void LoadOsuLevelsList()
-    {
-        if (!Directory.Exists(OsuLevelsDir))
-        {
-            OsuLevelsEmpty.Visibility = Visibility.Visible;
-            OsuLevelsList.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        var maps = new List<NoteMap>();
-        foreach (var dir in Directory.GetDirectories(OsuLevelsDir))
-        {
-            var json = Path.Combine(dir, "notes.json");
-            if (!File.Exists(json)) continue;
-            try
-            {
-                var map = JsonSerializer.Deserialize<NoteMap>(File.ReadAllText(json));
-                if (map != null)
-                {
-                    map.LevelDir = dir;
-                    if (map.DateAdded == default)
-                        map.DateAdded = Directory.GetCreationTime(dir);
-                    var sourcePath = Path.Combine(dir, "source.osz.path");
-                    if (File.Exists(sourcePath))
-                        map.SourceOszPath = File.ReadAllText(sourcePath).Trim();
-                    maps.Add(map);
-                }
-            }
-            catch { }
-        }
-
-        if (maps.Count == 0)
-        {
-            OsuLevelsEmpty.Visibility = Visibility.Visible;
-            OsuLevelsList.Visibility = Visibility.Collapsed;
-            OsuLevelsList.ItemsSource = null;
-            _osuTracksView = null;
-        }
-        else
-        {
-            OsuLevelsEmpty.Visibility = Visibility.Collapsed;
-            OsuLevelsList.Visibility = Visibility.Visible;
-            OsuLevelsList.ItemsSource = maps;
-            _osuTracksView = CollectionViewSource.GetDefaultView(OsuLevelsList.ItemsSource);
-            _osuTracksView.Filter = OsuTrackFilterPredicate;
-            ApplyOsuSorting();
-        }
-    }
-
-    private void OsuLevelCard_Click(object s, MouseButtonEventArgs e)
-    {
-        if ((s as FrameworkElement)?.Tag is not NoteMap map) return;
-        var mp3 = map.LevelDir != null
-            ? Directory.GetFiles(map.LevelDir, "*.mp3").FirstOrDefault()
-            : null;
-        if (mp3 == null)
-        {
-            ShowNotification("Ошибка", "Аудио файл не найден", isError: true);
-            return;
-        }
-        ShowGameView(GamePlayView);
-        StartGame(map.Notes, mp3, map.Title ?? "Osu! трек", map.Bpm);
-    }
-
-    private void DeleteOsuLevel_Click(object s, RoutedEventArgs e)
-    {
-        e.Handled = true;
-        if ((s as Button)?.Tag is not NoteMap map) return;
-
-        ShowConfirmDialog(
-            "Удалить osu! уровень?",
-            $"Уровень «{map.Title}» будет удалён безвозвратно.",
-            confirmed =>
-            {
-                if (!confirmed) return;
-                if (map.LevelDir != null && Directory.Exists(map.LevelDir))
-                    Directory.Delete(map.LevelDir, recursive: true);
-                LoadOsuLevelsList();
-            });
-    }
-
-    private void ExportOsuLevel_Click(object s, RoutedEventArgs e)
-    {
-        e.Handled = true;
-        if ((s as Button)?.Tag is not NoteMap map) return;
-
-        if (!string.IsNullOrEmpty(map.SourceOszPath) && File.Exists(map.SourceOszPath))
-        {
-            var dlg = new Microsoft.Win32.SaveFileDialog
-            {
-                FileName = map.Title,
-                DefaultExt = ".osz",
-                Filter = "osu! архив|*.osz"
-            };
-            if (dlg.ShowDialog() != true) return;
-            File.Copy(map.SourceOszPath, dlg.FileName!, overwrite: true);
-            ShowNotification("Экспорт", $"Трек «{map.Title}» экспортирован", isError: false);
-            return;
-        }
-
-        var dir = Path.Combine(OsuLevelsDir, map.Title ?? "level");
-        var dlg2 = new Microsoft.Win32.SaveFileDialog
-        {
-            FileName = map.Title + "_export",
-            DefaultExt = ".zip",
-            Filter = "ZIP Archive|*.zip"
-        };
-        if (dlg2.ShowDialog() != true) return;
-        ZipFile.CreateFromDirectory(dir, dlg2.FileName);
-        ShowNotification("Экспорт", $"Трек «{map.Title}» экспортирован как ZIP", isError: false);
-    }
-
-    private async void DownloadFfmpegBtn_Click(object sender, RoutedEventArgs e)
-    {
-        DownloadFfmpegBtn.IsEnabled = false;
-        FfmpegBtnText.Text = "Скачиваем...";
-
-        try
-        {
-            var ffmpegDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "NetFix", "ffmpeg");
-            Directory.CreateDirectory(ffmpegDir);
-
-            var zipPath = Path.Combine(ffmpegDir, "ffmpeg.zip");
-            var ffmpegExe = Path.Combine(ffmpegDir, "ffmpeg.exe");
-
-            const string url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip";
-
-            using var http = new System.Net.Http.HttpClient();
-            http.Timeout = TimeSpan.FromMinutes(5);
-            FfmpegBtnText.Text = "Скачиваем... (это может занять минуту)";
-
-            var bytes = await http.GetByteArrayAsync(url);
-            await File.WriteAllBytesAsync(zipPath, bytes);
-
-            FfmpegBtnText.Text = "Распаковываем...";
-            await Task.Run(() =>
-            {
-                var extractDir = Path.Combine(ffmpegDir, "extracted");
-                if (Directory.Exists(extractDir)) Directory.Delete(extractDir, true);
-                ZipFile.ExtractToDirectory(zipPath, extractDir);
-
-                var found = Directory.GetFiles(extractDir, "ffmpeg.exe", SearchOption.AllDirectories)
-                    .FirstOrDefault();
-                if (found != null)
-                    File.Copy(found, ffmpegExe, overwrite: true);
-
-                Directory.Delete(extractDir, true);
-                File.Delete(zipPath);
-            });
-
-            if (File.Exists(ffmpegExe))
-            {
-                _settings.FfmpegPath = ffmpegExe;
-                SettingsService.Save(_settings);
-                CheckFfmpegStatus();
-                ShowNotification("ffmpeg", "ffmpeg успешно установлен!", isError: false);
-            }
-            else
-            {
-                throw new Exception("ffmpeg.exe не найден в архиве");
-            }
-        }
-        catch (Exception ex)
-        {
-            FfmpegBtnText.Text = "Скачать ffmpeg";
-            DownloadFfmpegBtn.IsEnabled = true;
-            ShowNotification("Ошибка", $"Не удалось скачать ffmpeg: {ex.Message}", isError: true);
-        }
-    }
-
-    private void CheckFfmpegStatus()
-    {
-        bool ok = !string.IsNullOrEmpty(_settings.FfmpegPath) && File.Exists(_settings.FfmpegPath);
-        FfmpegOkBadge.Visibility = ok ? Visibility.Visible : Visibility.Collapsed;
-        DownloadFfmpegBtn.Visibility = ok ? Visibility.Collapsed : Visibility.Visible;
-    }
-
-    private void ManualFfmpegLink_Click(object sender, RoutedEventArgs e)
-    {
-        ManualInstallPanel.Visibility = ManualInstallPanel.Visibility == Visibility.Collapsed
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-    }
-
-    private void CheckFfmpegStatus_Click(object sender, RoutedEventArgs e)
-    {
-        CheckFfmpegStatus();
-        var btn = (Button)sender;
-        var original = btn.Content.ToString();
-        bool ok = !string.IsNullOrEmpty(_settings.FfmpegPath) && File.Exists(_settings.FfmpegPath);
-        btn.Content = ok ? "✓ Файл найден!" : "✗ Файл не найден";
-        Task.Delay(2000).ContinueWith(_ =>
-            Dispatcher.Invoke(() => btn.Content = original));
-    }
 
     private void ShowNotification(string title, string message, bool isError, bool isWarning = false)
     {
@@ -13251,25 +9499,6 @@ public partial class MainWindow : Window
         overlay.Child = notificationCard;
     }
 
-    private void DeleteUserLevel_Click(object s, RoutedEventArgs e)
-    {
-        e.Handled = true;
-        if ((s as Button)?.Tag is not NoteMap map) return;
-
-        ShowConfirmDialog(
-            "Удалить уровень?",
-            $"Уровень «{map.Title}» будет удалён безвозвратно.",
-            confirmed =>
-            {
-                if (!confirmed) return;
-                var dir = System.IO.Path.Combine(LevelsDir, map.Title ?? "level");
-                if (Directory.Exists(dir))
-                {
-                    Directory.Delete(dir, recursive: true);
-                    LoadUserLevels();
-                }
-            });
-    }
 
     private void ShowHostsWarningDialog(Action onClose)
     {
@@ -13672,7 +9901,7 @@ public partial class MainWindow : Window
         AddSpan(tip3, "• ");
         AddSpan(tip3, "Следите за обновлениями", bold: true);
         AddSpan(tip3, ": Свежие и актуальные моды вы всегда можете найти в комментариях моего Telegram-канала ");
-        AddSpan(tip3, "NetFix", bold: true);
+        AddSpan(tip3, "BypassDPI-WPF", bold: true);
         AddSpan(tip3, ", либо собрать собственный рабочий вариант.");
 
         AddSeparator();
@@ -13954,266 +10183,18 @@ public partial class MainWindow : Window
         Grid.SetRowSpan(overlay, 10);
     }
 
-    private void EditorBrowseTrack_Click(object s, RoutedEventArgs e)
-    {
-        var dlg = new OpenFileDialog { Filter = "MP3 файлы|*.mp3|Все файлы|*.*" };
-        if (dlg.ShowDialog() != true) return;
-        _editorMp3Path = dlg.FileName;
-        EditorTrackPath.Text = System.IO.Path.GetFileName(_editorMp3Path);
-    }
 
-    private void BpmAnalyzerLink_Click(object s, RoutedEventArgs e)
-    {
-        OpenUrl("https://tunebat.com/Analyzer");
-    }
 
-    private bool TryGetEditorBpm(out double bpm)
-    {
-        var text = EditorBpmBox.Text.Trim().Replace(',', '.');
-        if (double.TryParse(
-                text,
-                System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture,
-                out bpm) &&
-            bpm >= 40 &&
-            bpm <= 240)
-        {
-            return true;
-        }
 
-        bpm = REFERENCE_BPM;
-        return false;
-    }
 
-    private async void EditorStartBtn_Click(object s, RoutedEventArgs e)
-    {
-        if (string.IsNullOrWhiteSpace(_editorMp3Path) || !File.Exists(_editorMp3Path))
-        {
-            EditorStatusBox.Visibility = Visibility.Visible;
-            EditorStatusText.Text = "Выбери MP3 файл.";
-            return;
-        }
 
-        if (string.IsNullOrWhiteSpace(EditorTrackTitle.Text))
-        {
-            EditorStatusBox.Visibility = Visibility.Visible;
-            EditorStatusText.Text = "Введи название трека.";
-            return;
-        }
 
-        if (!TryGetEditorBpm(out _))
-        {
-            EditorStatusBox.Visibility = Visibility.Visible;
-            EditorStatusText.Text = "Введите BPM числом от 40 до 240.";
-            return;
-        }
 
-        EditorStartBtn.IsEnabled = false;
-        EditorStatusBox.Visibility = Visibility.Visible;
-        EditorCountdownBar.Visibility = Visibility.Visible;
-        EditorResultBox.Visibility = Visibility.Collapsed;
-        EditorRecordingBox.Visibility = Visibility.Collapsed;
 
-        for (int i = 3; i > 0; i--)
-        {
-            EditorStatusText.Text = $"Запись начнётся через {i}...";
-            EditorCountdownBar.Value = 3 - i + 1;
-            await Task.Delay(1000);
-        }
 
-        EditorStatusBox.Visibility = Visibility.Collapsed;
-        EditorRecordingBox.Visibility = Visibility.Visible;
-        EditorNoteCount.Text = "0 нот записано";
 
-        _recordedNotes = new();
-        _editorRecording = true;
-        _gameClock.Restart();
 
-        _editorPlayer.Open(new Uri(_editorMp3Path));
 
-        var editorStartTime = DateTime.Now;
-        var trackTitle = EditorTrackTitle.Text.Trim();
-        _discordEditorTimer?.Stop();
-        _discordEditorTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-        _discordEditorTimer.Tick += (_, _) => {
-            _discord.SetLevelEditor(trackTitle, _recordedNotes.Count, editorStartTime);
-        };
-        _discordEditorTimer.Start();
-
-        _discord.SetLevelEditor(trackTitle, 0, editorStartTime);
-
-        _editorPlayer.Volume = Math.Pow(_settings.GameVolume, 3);
-        _editorPlayer.Play();
-        _editorPlayer.MediaEnded += EditorPlayer_Ended;
-
-        EditorStopBtn.Visibility = Visibility.Visible;
-        PreviewKeyDown += Editor_KeyDown;
-    }
-
-    private void Editor_KeyDown(object s, System.Windows.Input.KeyEventArgs e)
-    {
-        if (!_editorRecording) return;
-        int lane = GetGameLane(e.Key);
-        if (lane < 0) return;
-        e.Handled = true;
-
-        _recordedNotes.Add(new NoteEntry
-        {
-            Time = _gameClock.Elapsed.TotalSeconds,
-            Lane = lane,
-        });
-
-        EditorNoteCount.Text = $"{_recordedNotes.Count} нот записано";
-
-        Border? keyBorder = lane switch
-        {
-            0 => EditorKeyA,
-            1 => EditorKeyS,
-            2 => EditorKeyK,
-            3 => EditorKeyL,
-            _ => null
-        };
-
-        if (keyBorder != null)
-        {
-            var originalBg = keyBorder.Background;
-            var flashColor = LaneColors[lane];
-            keyBorder.Background = new SolidColorBrush(Color.FromArgb(80, flashColor.R, flashColor.G, flashColor.B));
-
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
-            timer.Tick += (_, _) =>
-            {
-                keyBorder.Background = originalBg;
-                timer.Stop();
-            };
-            timer.Start();
-        }
-    }
-
-    private int GetGameLane(Key key)
-    {
-        string keyStr = key.ToString();
-        if (keyStr.StartsWith("D") && keyStr.Length == 2)
-            keyStr = keyStr[1..];
-
-        if (keyStr.Equals(_settings.KeyLane0, StringComparison.OrdinalIgnoreCase)) return 0;
-        if (keyStr.Equals(_settings.KeyLane1, StringComparison.OrdinalIgnoreCase)) return 1;
-        if (keyStr.Equals(_settings.KeyLane2, StringComparison.OrdinalIgnoreCase)) return 2;
-        if (keyStr.Equals(_settings.KeyLane3, StringComparison.OrdinalIgnoreCase)) return 3;
-
-        return key switch
-        {
-            Key.Left => 0,
-            Key.Down => 1,
-            Key.Up => 2,
-            Key.Right => 3,
-            _ => -1
-        };
-    }
-
-    private void EditorPlayer_Ended(object? s, EventArgs e)
-    {
-        Dispatcher.BeginInvoke(new Action(StopEditorRecording));
-    }
-
-    private void AudioFaqToggleBtn_Click(object sender, RoutedEventArgs e)
-    {
-        AudioFaqPanel.Visibility = AudioFaqPanel.Visibility == Visibility.Collapsed
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-    }
-
-    private void OpenPowerShellCmd_Click(object sender, RoutedEventArgs e)
-    {
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = "powershell.exe",
-            Arguments = "-NoExit -Command \"Enable-WindowsOptionalFeature -Online -FeatureName 'WindowsMediaPlayer'\"",
-            UseShellExecute = true,
-            Verb = "runas"
-        });
-    }
-
-    private void EditorStopBtn_Click(object s, RoutedEventArgs e) => StopEditorRecording();
-
-    private void StopEditorRecording()
-    {
-        if (!_editorRecording && _editorPlayer.Source == null) return;
-
-        _discordEditorTimer?.Stop();
-        _discordEditorTimer = null;
-        _discord.SetMainMenu();
-
-        _editorRecording = false;
-        _editorPlayer.Stop();
-        _editorPlayer.MediaEnded -= EditorPlayer_Ended;
-        PreviewKeyDown -= Editor_KeyDown;
-        _gameClock.Stop();
-
-        EditorStopBtn.Visibility = Visibility.Collapsed;
-        EditorRecordingBox.Visibility = Visibility.Collapsed;
-
-        if (_recordedNotes.Count == 0)
-        {
-            EditorStatusBox.Visibility = Visibility.Visible;
-            EditorStatusText.Text = "Нот не записано. Попробуй ещё раз.";
-            EditorStartBtn.IsEnabled = true;
-            return;
-        }
-
-        EditorResultBox.Visibility = Visibility.Visible;
-        EditorResultText.Text = $"Записано {_recordedNotes.Count} нот. Готово к сохранению!";
-        EditorStartBtn.IsEnabled = true;
-    }
-
-    private void EditorSaveBtn_Click(object s, RoutedEventArgs e)
-    {
-        var title = EditorTrackTitle.Text.Trim();
-        if (!TryGetEditorBpm(out var bpm))
-        {
-            EditorStatusBox.Visibility = Visibility.Visible;
-            EditorStatusText.Text = "Введите BPM числом от 40 до 240.";
-            return;
-        }
-
-        var dir = System.IO.Path.Combine(LevelsDir, title);
-        Directory.CreateDirectory(dir);
-
-        var destMp3 = System.IO.Path.Combine(dir, "track.mp3");
-        File.Copy(_editorMp3Path!, destMp3, overwrite: true);
-
-        var map = new NoteMap
-        {
-            Title = title,
-            TrackFile = "track.mp3",
-            Bpm = bpm,
-            Notes = _recordedNotes,
-        };
-
-        File.WriteAllText(
-            System.IO.Path.Combine(dir, "notes.json"),
-            JsonSerializer.Serialize(map, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
-
-        EditorStatusText.Text = $"Уровень «{title}» сохранён!";
-        LoadUserLevels();
-    }
-
-    private void EditorExportBtn_Click(object s, RoutedEventArgs e)
-    {
-        var title = EditorTrackTitle.Text.Trim();
-        var dir = System.IO.Path.Combine(LevelsDir, title);
-        if (!Directory.Exists(dir))
-            EditorSaveBtn_Click(s, new RoutedEventArgs());
-
-        var dlg = new Microsoft.Win32.SaveFileDialog
-        {
-            FileName = title + "_export",
-            DefaultExt = ".zip",
-            Filter = "ZIP Archive|*.zip"
-        };
-        if (dlg.ShowDialog() != true) return;
-        ZipFile.CreateFromDirectory(dir, dlg.FileName);
-    }
 
     private async void CheckForUpdatesBackgroundAsync()
     {
@@ -14443,8 +10424,7 @@ public partial class MainWindow : Window
 
         AddWizText("Приложение не обнаружило рабочие конфиги!\n\n" +
                    "Для работы приложения необходимо просканировать конфиги. " +
-                   "Выделите примерно 10 минут, во время проверки вы можете поиграть " +
-                   "в мини-игру или заняться своими делами.\n\n" +
+                   "Выделите примерно 10 минут, во время проверки вы можете заняться своими делами.\n\n" +
                    "После сканирования у вас будет полный функционал приложения!");
 
         AddWizBtn("Пройти тестирование", "#22c55e", () =>
@@ -14486,7 +10466,7 @@ public partial class MainWindow : Window
 
                     var cacheFile = Path.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                        "NetFix", "zapret_configs.json");
+                        "BypassDPI-WPF", "zapret_configs.json");
                     var cacheDir = Path.GetDirectoryName(cacheFile);
                     if (!string.IsNullOrEmpty(cacheDir) && !Directory.Exists(cacheDir))
                         Directory.CreateDirectory(cacheDir);
@@ -14592,21 +10572,24 @@ public partial class MainWindow : Window
     }
 
 
-    private async void StartTgWsProxyWithActivation()
+    private void StartTgWsProxyWithActivation()
+    {
+        // Telegram больше не открывается автоматически: запускаем только сам прокси.
+        StartTgWsProxyProcess();
+    }
+
+    private void StartTgWsProxyProcess()
     {
         try
         {
-            if (!string.IsNullOrEmpty(_settings.TgWsProxyPath) && File.Exists(_settings.TgWsProxyPath))
+            if (string.IsNullOrEmpty(_settings.TgWsProxyPath) || !File.Exists(_settings.TgWsProxyPath))
+                return;
+
+            Process.Start(new ProcessStartInfo(_settings.TgWsProxyPath)
             {
-                Process.Start(new ProcessStartInfo(_settings.TgWsProxyPath)
-                {
-                    UseShellExecute = true,
-                    WorkingDirectory = System.IO.Path.GetDirectoryName(_settings.TgWsProxyPath)
-                });
-
-                await ActivateTgWsProxyAsync();
-
-            }
+                UseShellExecute = true,
+                WorkingDirectory = System.IO.Path.GetDirectoryName(_settings.TgWsProxyPath)
+            });
         }
         catch
         {
@@ -15150,8 +11133,8 @@ public partial class MainWindow : Window
 
         p.Children.Add(viewBox);
 
-        AddOnboardTitle(p, "Зачем нужен NetFix");
-        AddOnboardSub(p, "NetFix автоматически восстанавливает доступ к YouTube, Discord, Telegram, а также к заблокированным сайтам и нейросетям (ChatGPT, Gemini и другим) без сложных настроек и сторонних VPN.");
+        AddOnboardTitle(p, "Зачем нужен BypassDPI-WPF");
+        AddOnboardSub(p, "BypassDPI-WPF автоматически восстанавливает доступ к YouTube, Discord, Telegram, а также к заблокированным сайтам и нейросетям (ChatGPT, Gemini и другим) без сложных настроек и сторонних VPN.");
         AddOnboardBtn(p, "Далее", "#3b82f6", () => ShowOnboardScreen(2));
     }
 
@@ -15237,7 +11220,7 @@ public partial class MainWindow : Window
 
         var link = new System.Windows.Documents.Hyperlink(new System.Windows.Documents.Run("GitHub"))
         {
-            NavigateUri = new Uri("https://github.com/rupleide/NetFix"),
+            NavigateUri = new Uri("https://github.com/vitaliyDrovosek/BypassDPI-WPF"),
             Foreground = new SolidColorBrush(Color.FromRgb(0x3b, 0x82, 0xf6)),
             TextDecorations = null,
             Cursor = Cursors.Hand
@@ -15596,10 +11579,10 @@ public partial class MainWindow : Window
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 24)
         };
-        footnote.Inlines.Add(new System.Windows.Documents.Run("Мобильная версия NetFix Mobile для Android уже доступна на "));
+        footnote.Inlines.Add(new System.Windows.Documents.Run("Неофициальный форк (fork of NetFix by rupleide). Исходные коды — на "));
         var mobileLink = new System.Windows.Documents.Hyperlink(new System.Windows.Documents.Run("GitHub"))
         {
-            NavigateUri = new Uri("https://github.com/rupleide/NetFixMobile"),
+            NavigateUri = new Uri("https://github.com/vitaliyDrovosek/BypassDPI-WPF"),
             Foreground = new SolidColorBrush(Color.FromRgb(0x3b, 0x82, 0xf6)),
             TextDecorations = null,
             Cursor = Cursors.Hand
@@ -15608,7 +11591,7 @@ public partial class MainWindow : Window
         footnote.Inlines.Add(mobileLink);
         p.Children.Add(footnote);
 
-        AddOnboardBtn(p, "Открыть NetFix", "#22c55e", () =>
+        AddOnboardBtn(p, "Открыть BypassDPI-WPF", "#22c55e", () =>
         {
             SettingsService.MarkOnboarded();
             OnboardLayer.Visibility = Visibility.Collapsed;
@@ -15751,7 +11734,7 @@ public partial class MainWindow : Window
             LogBoxWrapper.RenderTransform = new TranslateTransform(0, 14);
         }
 
-        UIElement?[] navButtons = [ServicesBtn, ModsNavBtn, FaqNavBtn, DiagNavBtn, GameNavBtn, SettingsBtn, MinBtn, CloseBtn];
+        UIElement?[] navButtons = [ServicesBtn, ModsNavBtn, FaqNavBtn, DiagNavBtn, SettingsBtn, MinBtn, CloseBtn];
         foreach (var btn in navButtons)
         {
             if (btn == null) continue;
@@ -15890,8 +11873,8 @@ public partial class MainWindow : Window
             statusDelay += 45;
         }
 
-        UIElement?[] navButtons = [ServicesBtn, ModsNavBtn, FaqNavBtn, DiagNavBtn, GameNavBtn, SettingsBtn, MinBtn, CloseBtn];
         int navDelay = baseDelayMs + 140;
+        UIElement?[] navButtons = [ServicesBtn, ModsNavBtn, FaqNavBtn, DiagNavBtn, SettingsBtn, MinBtn, CloseBtn];
         foreach (var btn in navButtons)
         {
             if (btn == null) continue;
@@ -16571,7 +12554,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            string taskName = "NetFix";
+            string taskName = "BypassDPI-WPF";
             string path = Environment.ProcessPath;
 
             if (enable)
@@ -16601,7 +12584,7 @@ public partial class MainWindow : Window
             {
                 using var regKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
                     @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
-                regKey?.DeleteValue("NetFix", false);
+                regKey?.DeleteValue("BypassDPI-WPF", false);
             }
             catch { }
         }
@@ -16979,574 +12962,7 @@ public partial class MainWindow : Window
     }
 
     private int _listeningLane = -1;
-
-    private void GameSettingsMenuBtn_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        GameMenuView.Visibility = Visibility.Collapsed;
-        GameSettingsView.Visibility = Visibility.Visible;
-        LoadKeyLabels();
-        var wasLoaded = _settingsLoaded;
-        _settingsLoaded = false;
-        ComboEffectCB.IsChecked = _settings.DisableComboEffect;
-        _settingsLoaded = wasLoaded;
-    }
-
-    private void GameSettingsMenuBtn_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
-        => ((Border)sender).Background = new SolidColorBrush(Color.FromRgb(0x2a, 0x2a, 0x2a));
-
-    private void GameSettingsMenuBtn_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
-        => ((Border)sender).Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x1e, 0x1e));
-
-    private void LoadKeyLabels()
-    {
-        KeyLabelLane0.Text = _settings.KeyLane0;
-        KeyLabelLane1.Text = _settings.KeyLane1;
-        KeyLabelLane2.Text = _settings.KeyLane2;
-        KeyLabelLane3.Text = _settings.KeyLane3;
-        UpdateKeyHints();
-    }
-
-    private void UpdateKeyHints()
-    {
-        KeyHint0.Text = $"{_settings.KeyLane0} / ←";
-        KeyHint1.Text = $"{_settings.KeyLane1} / ↓";
-        KeyHint2.Text = $"{_settings.KeyLane2} / ↑";
-        KeyHint3.Text = $"{_settings.KeyLane3} / →";
-    }
-
-    private void KeyBtn_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        _listeningLane = int.Parse((string)((Border)sender).Tag);
-
-        TextBlock[] labels = [KeyLabelLane0, KeyLabelLane1, KeyLabelLane2, KeyLabelLane3];
-        Border[] btns = [KeyBtnLane0, KeyBtnLane1, KeyBtnLane2, KeyBtnLane3];
-
-        for (int i = 0; i < btns.Length; i++)
-        {
-            btns[i].BorderThickness = new Thickness(0);
-            labels[i].Text = i switch
-            {
-                0 => _settings.KeyLane0,
-                1 => _settings.KeyLane1,
-                2 => _settings.KeyLane2,
-                3 => _settings.KeyLane3,
-                _ => ""
-            };
-        }
-
-        btns[_listeningLane].BorderThickness = new Thickness(1);
-        btns[_listeningLane].BorderBrush = new SolidColorBrush(Colors.White);
-        labels[_listeningLane].Text = "...";
-
-        var blinkTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
-        bool visible = true;
-        blinkTimer.Tick += (_, _) =>
-        {
-            if (_listeningLane < 0) { blinkTimer.Stop(); return; }
-            visible = !visible;
-            labels[_listeningLane].Opacity = visible ? 1.0 : 0.2;
-        };
-        blinkTimer.Start();
-
-        GameSettingsView.Focus();
-    }
-
-    private void GameSettingsView_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (_listeningLane < 0) return;
-
-        string keyStr = e.Key.ToString();
-        if (keyStr.Length > 1 && !keyStr.StartsWith("D") && keyStr != "Space") return;
-        if (keyStr.StartsWith("D") && keyStr.Length == 2) keyStr = keyStr[1..];
-
-        switch (_listeningLane)
-        {
-            case 0: _settings.KeyLane0 = keyStr; KeyLabelLane0.Text = keyStr; break;
-            case 1: _settings.KeyLane1 = keyStr; KeyLabelLane1.Text = keyStr; break;
-            case 2: _settings.KeyLane2 = keyStr; KeyLabelLane2.Text = keyStr; break;
-            case 3: _settings.KeyLane3 = keyStr; KeyLabelLane3.Text = keyStr; break;
-        }
-
-        _listeningLane = -1;
-        Border[] btns = [KeyBtnLane0, KeyBtnLane1, KeyBtnLane2, KeyBtnLane3];
-        foreach (var b in btns) b.BorderThickness = new Thickness(0);
-
-        SettingsService.Save(_settings);
-
-        TextBlock[] labels = [KeyLabelLane0, KeyLabelLane1, KeyLabelLane2, KeyLabelLane3];
-        foreach (var l in labels) l.Opacity = 1.0;
-
-        UpdateKeyHints();
-        e.Handled = true;
-    }
-
-    private void ResetKeysBtn_Click(object sender, RoutedEventArgs e)
-    {
-        _settings.KeyLane0 = "A";
-        _settings.KeyLane1 = "S";
-        _settings.KeyLane2 = "W";
-        _settings.KeyLane3 = "D";
-        SettingsService.Save(_settings);
-        LoadKeyLabels();
-    }
-
-    private void GameStatsMenuBtn_Click(object sender, MouseButtonEventArgs e)
-    {
-        GameMenuView.Visibility = Visibility.Collapsed;
-        GameStatsView.Visibility = Visibility.Visible;
-        GameStatsView.Focus();
-        PopulateStatsList();
-    }
-
-    private void StatsBackToMenuBtn_Click(object sender, RoutedEventArgs e)
-    {
-        GameStatsView.Visibility = Visibility.Collapsed;
-        GameMenuView.Visibility = Visibility.Visible;
-    }
-
-    private void StatsDetailBackBtn_Click(object sender, RoutedEventArgs e)
-    {
-        GameStatsDetailView.Visibility = Visibility.Collapsed;
-        GameStatsView.Visibility = Visibility.Visible;
-        GameStatsView.Focus();
-    }
-
-    private void GameStatsView_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (e.Key == Key.Escape) StatsBackToMenuBtn_Click(sender, e);
-    }
-
-    private void GameStatsDetailView_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (e.Key == Key.Escape) StatsDetailBackBtn_Click(sender, e);
-    }
-
-    private void PopulateStatsList()
-    {
-        StatsListPanel.Children.Clear();
-        var history = _settings.TrackHistory;
-
-        var query = history.AsEnumerable();
-        if (!string.IsNullOrWhiteSpace(_statsSearchText))
-            query = query.Where(t =>
-                t.TrackTitle.Contains(_statsSearchText, StringComparison.OrdinalIgnoreCase));
-
-        query = _settings.StatsSortMode switch
-        {
-            "TitleAsc"        => query.OrderBy(t => t.TrackTitle),
-            "LastPlayedDesc"  => query.OrderByDescending(t => t.LastPlayed),
-            "LastPlayedAsc"   => query.OrderBy(t => t.LastPlayed),
-            "TimesPlayedDesc" => query.OrderByDescending(t => t.TimesPlayed),
-            "TimesPlayedAsc"  => query.OrderBy(t => t.TimesPlayed),
-            "BestScoreDesc"   => query.OrderByDescending(t => t.BestScore),
-            "BestAccuracyDesc"=> query.OrderByDescending(t => t.BestAccuracy),
-            _                 => query.OrderByDescending(t => t.LastPlayed)
-        };
-
-        var filtered = query.ToList();
-
-        if (filtered.Count == 0)
-        {
-            StatsEmptyState.Visibility = Visibility.Visible;
-            return;
-        }
-        StatsEmptyState.Visibility = Visibility.Collapsed;
-
-        foreach (var t in filtered)
-        {
-            var rankColor = GetRankColor(t.BestRank);
-
-            var card = new Border
-            {
-                CornerRadius = new CornerRadius(10),
-                Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x1e, 0x1e)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
-                BorderThickness = new Thickness(1),
-                Margin = new Thickness(0, 0, 0, 8),
-                Cursor = Cursors.Hand,
-                Padding = new Thickness(16, 14, 16, 14)
-            };
-
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var rankTb = new TextBlock
-            {
-                Text = t.BestRank,
-                FontSize = 28,
-                FontWeight = FontWeights.Bold,
-                FontFamily = new FontFamily("Segoe UI"),
-                Foreground = new SolidColorBrush(rankColor),
-                VerticalAlignment = VerticalAlignment.Center,
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                LineHeight = 28
-            };
-            Grid.SetColumn(rankTb, 0);
-
-            var infoStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
-
-            var titleTb = new TextBlock
-            {
-                Text = t.TrackTitle,
-                FontSize = 14,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Brushes.White,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                Margin = new Thickness(0, 0, 0, 4)
-            };
-
-            var subStack = new StackPanel { Orientation = Orientation.Horizontal };
-            subStack.Children.Add(CreateMiniStat($"{t.BestAccuracy:F1}%", "#a855f7"));
-            subStack.Children.Add(CreateSeparator());
-            subStack.Children.Add(CreateMiniStat($"×{t.BestCombo}", "#3b82f6"));
-            subStack.Children.Add(CreateSeparator());
-            subStack.Children.Add(CreateMiniStat($"{t.TimesPlayed} игр", "#666"));
-
-            infoStack.Children.Add(titleTb);
-            infoStack.Children.Add(subStack);
-            Grid.SetColumn(infoStack, 1);
-
-            var rightStack = new StackPanel
-            {
-                VerticalAlignment = VerticalAlignment.Center,
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Right
-            };
-
-            rightStack.Children.Add(new TextBlock
-            {
-                Text = t.BestScore.ToString("N0"),
-                FontSize = 16,
-                FontWeight = FontWeights.Bold,
-                Foreground = Brushes.White,
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Right
-            });
-
-            rightStack.Children.Add(new TextBlock
-            {
-                Text = t.LastPlayed.ToString("dd.MM.yy"),
-                FontSize = 11,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66)),
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
-                Margin = new Thickness(0, 2, 0, 0)
-            });
-            Grid.SetColumn(rightStack, 2);
-
-            grid.Children.Add(rankTb);
-            grid.Children.Add(infoStack);
-            grid.Children.Add(rightStack);
-            card.Child = grid;
-
-            card.MouseEnter += (s, _) =>
-            {
-                card.Background = new SolidColorBrush(Color.FromRgb(0x27, 0x27, 0x27));
-                card.BorderBrush = new SolidColorBrush(rankColor);
-            };
-            card.MouseLeave += (s, _) =>
-            {
-                card.Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x1e, 0x1e));
-                card.BorderBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33));
-            };
-
-            var captured = t;
-            card.MouseLeftButtonUp += (_, _) => OpenStatsDetail(captured);
-
-            StatsListPanel.Children.Add(card);
-        }
-    }
-
-    private static TextBlock CreateMiniStat(string text, string colorHex)
-    {
-        return new TextBlock
-        {
-            Text = text,
-            FontSize = 11,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = (SolidColorBrush)new BrushConverter().ConvertFrom(colorHex)
-        };
-    }
-
-    private static Border CreateSeparator()
-    {
-        return new Border
-        {
-            Width = 3, Height = 3, CornerRadius = new CornerRadius(2),
-            Background = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44)),
-            Margin = new Thickness(6, 0, 6, 0),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-    }
-
-    private static Color GetRankColor(string rank) => rank switch
-    {
-        "S" => Color.FromRgb(0xFF, 0xD7, 0x00),
-        "A" => Color.FromRgb(0x7C, 0xFC, 0x00),
-        "B" => Color.FromRgb(0x00, 0xBF, 0xFF),
-        "C" => Color.FromRgb(0xCC, 0xCC, 0xCC),
-        "D" => Color.FromRgb(0xFF, 0xA5, 0x00),
-        _   => Color.FromRgb(0xFF, 0x44, 0x44)
-    };
-
-    private void OpenStatsDetail(GameTrackStats t)
-    {
-        GameStatsView.Visibility = Visibility.Collapsed;
-        GameStatsDetailView.Visibility = Visibility.Visible;
-        GameStatsDetailView.Focus();
-
-        StatsDetailTitle.Text = t.TrackTitle;
-        StatsDetailPlays.Text = $"{t.TimesPlayed} ЗАПУСКОВ";
-        StatsDetailDates.Text = $"Первая: {t.FirstPlayed:dd.MM.yyyy} · Последняя: {t.LastPlayed:dd.MM.yyyy}";
-
-        StatsDetailPanel.Children.Clear();
-
-        double lifeAcc = t.TotalNotes > 0 ? t.TotalHits * 100.0 / t.TotalNotes : 0;
-        double hitRate = (t.TotalHits + t.TotalMisses) > 0
-            ? t.TotalHits * 100.0 / (t.TotalHits + t.TotalMisses) : 0;
-
-        AddSectionHeader("ЛИЧНЫЕ РЕКОРДЫ");
-
-        var recordsGrid = new Grid { Margin = new Thickness(0, 0, 0, 16) };
-        recordsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        recordsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        recordsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        recordsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-        AddRecordCard(recordsGrid, 0, 0, "ЛУЧШИЙ РАНГ", t.BestRank, GetRankColor(t.BestRank));
-        AddRecordCard(recordsGrid, 0, 1, "МАКС. ТОЧНОСТЬ", $"{t.BestAccuracy:F2}%", Color.FromRgb(0xa8, 0x55, 0xf7));
-        AddRecordCard(recordsGrid, 1, 0, "ЛУЧШЕЕ КОМБО", $"×{t.BestCombo}", Color.FromRgb(0x3b, 0x82, 0xf6));
-        AddRecordCard(recordsGrid, 1, 1, "РЕКОРД ОЧКОВ", t.BestScore.ToString("N0"), Color.FromRgb(0xff, 0xff, 0xff));
-
-        StatsDetailPanel.Children.Add(recordsGrid);
-
-        AddSectionHeader("ЗА ВСЕ ВРЕМЯ");
-
-        AddDetailRow("Всего нажатий", t.TotalKeyPresses.ToString("N0"));
-        AddDetailRow("Попаданий", $"{t.TotalHits:N0}", $"{hitRate:F1}% эффективность");
-        AddDetailRow("Промахов", $"{t.TotalMisses:N0}", t.TotalMisses > 0 ? "#ef4444" : "#666");
-        AddDetailRow("Lifetime Accuracy", $"{lifeAcc:F2}%", "отношение попаданий к нотам");
-
-        AddSectionHeader("ПРОЧЕЕ");
-        AddDetailRow("Худшая точность", $"{t.WorstAccuracy:F1}%", "#666");
-        AddDetailRow("Мин. очки", t.MinScore == int.MaxValue ? "—" : t.MinScore.ToString("N0"), "#666");
-    }
-
-    private void AddSectionHeader(string text)
-    {
-        StatsDetailPanel.Children.Add(new TextBlock
-        {
-            Text = text,
-            FontSize = 12,
-            FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66)),
-            Margin = new Thickness(2, 8, 0, 8)
-        });
-    }
-
-    private void AddRecordCard(Grid parent, int row, int col, string label, string value, Color accent)
-    {
-        var card = new Border
-        {
-            Background = new SolidColorBrush(Color.FromRgb(0x1e, 0x1e, 0x1e)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(14, 12, 14, 12),
-            Margin = new Thickness(col == 0 ? 0 : 4, row == 0 ? 0 : 4, col == 1 ? 0 : 4, row == 1 ? 0 : 4)
-        };
-
-        var stack = new StackPanel();
-        stack.Children.Add(new TextBlock
-        {
-            Text = label,
-            FontSize = 10,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
-            Margin = new Thickness(0, 0, 0, 4)
-        });
-        stack.Children.Add(new TextBlock
-        {
-            Text = value,
-            FontSize = 18,
-            FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(accent)
-        });
-
-        card.Child = stack;
-        Grid.SetRow(card, row);
-        Grid.SetColumn(card, col);
-        parent.Children.Add(card);
-    }
-
-    private void AddDetailRow(string label, string value, string? subOrColor = null)
-    {
-        bool isColor = subOrColor?.StartsWith("#") == true;
-
-        var row = new Border
-        {
-            Background = new SolidColorBrush(Color.FromRgb(0x1a, 0x1a, 0x1a)),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(14, 10, 14, 10),
-            Margin = new Thickness(0, 0, 0, 4)
-        };
-
-        var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        var leftStack = new StackPanel();
-        leftStack.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = new SolidColorBrush(Color.FromRgb(0xaa, 0xaa, 0xaa)) });
-
-        if (!isColor && subOrColor != null)
-        {
-            leftStack.Children.Add(new TextBlock
-            {
-                Text = subOrColor,
-                FontSize = 10,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55))
-            });
-        }
-
-        var valTb = new TextBlock
-        {
-            Text = value,
-            FontSize = 14,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = isColor
-                ? (SolidColorBrush)new BrushConverter().ConvertFrom(subOrColor!)
-                : Brushes.White
-        };
-
-        Grid.SetColumn(leftStack, 0);
-        Grid.SetColumn(valTb, 1);
-        grid.Children.Add(leftStack);
-        grid.Children.Add(valTb);
-        row.Child = grid;
-
-        StatsDetailPanel.Children.Add(row);
-    }
-
-    private void SpawnDoubleStrikeEffect(Color comboColor)
-    {
-        double canvasW = GamePlayView.ActualWidth > 0 ? GamePlayView.ActualWidth : 800;
-        double canvasH = GamePlayView.ActualHeight > 0 ? GamePlayView.ActualHeight : 500;
-        double hitY = canvasH - 70;
-        var rng = new Random();
-
-        Color brightColor = Color.FromRgb(
-            (byte)Math.Min(255, comboColor.R + 80),
-            (byte)Math.Min(255, comboColor.G + 80),
-            (byte)Math.Min(255, comboColor.B + 80));
-
-        Color[] palette = [comboColor, brightColor, Color.FromRgb(0xff, 0xff, 0xff)];
-
-        var overlay = new Canvas
-        {
-            Width = canvasW, Height = canvasH,
-            IsHitTestVisible = false
-        };
-        GamePlayView.Children.Add(overlay);
-
-        var flash = new System.Windows.Shapes.Rectangle
-        {
-            Width = canvasW, Height = canvasH,
-            IsHitTestVisible = false,
-            Fill = new LinearGradientBrush(
-                Color.FromArgb(90, comboColor.R, comboColor.G, comboColor.B),
-                Color.FromArgb(0, comboColor.R, comboColor.G, comboColor.B),
-                90)
-        };
-        overlay.Children.Add(flash);
-        var flashIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120));
-        var flashOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(2000))
-            { BeginTime = TimeSpan.FromMilliseconds(120) };
-        flashOut.Completed += (_, _) => overlay.Children.Remove(flash);
-        flash.BeginAnimation(UIElement.OpacityProperty, flashIn);
-        flash.BeginAnimation(UIElement.OpacityProperty, flashOut);
-
-        foreach (bool fromLeft in new[] { true, false })
-        {
-            var wave = new Ellipse
-            {
-                Width = 200, Height = 200,
-                Stroke = new SolidColorBrush(Color.FromArgb(200, comboColor.R, comboColor.G, comboColor.B)),
-                StrokeThickness = 3,
-                Fill = Brushes.Transparent,
-                IsHitTestVisible = false,
-                RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
-                RenderTransform = new ScaleTransform(0.3, 0.3)
-            };
-            double startX = fromLeft ? 0 : canvasW - 200;
-            Canvas.SetLeft(wave, startX);
-            Canvas.SetTop(wave, hitY - 100);
-            overlay.Children.Add(wave);
-
-            var sc = (ScaleTransform)wave.RenderTransform;
-            sc.BeginAnimation(ScaleTransform.ScaleXProperty,
-                new DoubleAnimation(0.3, 3.0, TimeSpan.FromMilliseconds(900))
-                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-            sc.BeginAnimation(ScaleTransform.ScaleYProperty,
-                new DoubleAnimation(0.3, 3.0, TimeSpan.FromMilliseconds(900))
-                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-            var waveAnim = new DoubleAnimationUsingKeyFrames();
-            waveAnim.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-            waveAnim.KeyFrames.Add(new LinearDoubleKeyFrame(0.85, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(150))));
-            waveAnim.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1000))));
-            waveAnim.Completed += (_, _) => overlay.Children.Remove(wave);
-            wave.BeginAnimation(UIElement.OpacityProperty, waveAnim);
-        }
-
-        for (int p = 0; p < 10; p++)
-            SpawnDoubleStrikeParticle(overlay, canvasW, hitY, rng, palette);
-
-        var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
-        t.Tick += (_, _) =>
-        {
-            t.Stop();
-            for (int p = 0; p < 10; p++)
-                SpawnDoubleStrikeParticle(overlay, canvasW, hitY, rng, palette);
-        };
-        t.Start();
-
-        var cleanup = new DoubleAnimation(1, 1, TimeSpan.FromMilliseconds(2800));
-        cleanup.Completed += (_, _) => GamePlayView.Children.Remove(overlay);
-        overlay.BeginAnimation(UIElement.OpacityProperty, cleanup);
-    }
-
-    private void SpawnDoubleStrikeParticle(System.Windows.Controls.Canvas overlay, double canvasW, double hitY, Random rng, Color[] palette)
-    {
-        double angle = rng.NextDouble() * 360;
-        double rad = angle * Math.PI / 180.0;
-        double dist = 60 + rng.Next(30, 120);
-        double size = rng.Next(4, 11);
-        double startX = canvasW * 0.2 + rng.NextDouble() * canvasW * 0.6;
-
-        var particle = new System.Windows.Shapes.Ellipse
-        {
-            Width = size, Height = size,
-            Fill = new System.Windows.Media.SolidColorBrush(palette[rng.Next(palette.Length)]),
-            IsHitTestVisible = false,
-            RenderTransform = new TranslateTransform()
-        };
-        System.Windows.Controls.Canvas.SetLeft(particle, startX);
-        System.Windows.Controls.Canvas.SetTop(particle, hitY);
-        overlay.Children.Add(particle);
-
-        int dur = 900 + rng.Next(0, 400);
-        var tt = (TranslateTransform)particle.RenderTransform;
-        tt.BeginAnimation(TranslateTransform.XProperty,
-            new DoubleAnimation(0, Math.Cos(rad) * dist, TimeSpan.FromMilliseconds(dur))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-        tt.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(0, Math.Sin(rad) * dist - 40, TimeSpan.FromMilliseconds(dur))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-        var fadeAnim = new DoubleAnimationUsingKeyFrames();
-        fadeAnim.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-        fadeAnim.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(dur))));
-        fadeAnim.Completed += (_, _) => overlay.Children.Remove(particle);
-        particle.BeginAnimation(UIElement.OpacityProperty, fadeAnim);
-    }
-
-    public record DnsServerInfo(string Name, string Description, string Primary, string Secondary, string DohTemplate = "", bool IsCustom = false);
+public record DnsServerInfo(string Name, string Description, string Primary, string Secondary, string DohTemplate = "", bool IsCustom = false);
 
     private static readonly IReadOnlyList<DnsServerInfo> PredefinedDnsServers = [
         new DnsServerInfo("Системный (DHCP)", "Использовать DNS-серверы, полученные от роутера или провайдера", "dhcp", "", ""),

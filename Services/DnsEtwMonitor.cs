@@ -8,7 +8,7 @@ namespace NetFix.Services;
 public sealed class DnsEtwMonitor : IDisposable
 {
     private static readonly Guid DnsClientProviderGuid = new("1C950233-BE20-4979-8AEE-7DC084E6E83A");
-    private const string SessionName = "NetFixDnsEtwSession";
+    private const string SessionName = "BypassDPI-WPF-DnsEtwSession";
 
     private ulong _sessionHandle;
     private ulong _traceHandle = ulong.MaxValue;
@@ -79,7 +79,7 @@ public sealed class DnsEtwMonitor : IDisposable
                     _traceThread = new Thread(TraceWorker)
                     {
                         IsBackground = true,
-                        Name = "NetFix-DnsEtwWorker"
+                        Name = "BypassDPI-WPF-DnsEtwWorker"
                     };
                     _traceThread.Start();
                     _isRunning = true;

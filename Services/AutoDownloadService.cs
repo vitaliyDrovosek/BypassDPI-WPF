@@ -95,7 +95,7 @@ public static class AutoDownloadService
 
 
             string mainInstallDir = @"C:\Zapret";
-            string tempInstallDir = Path.Combine(Path.GetTempPath(), $"NetFix_Zapret_Temp_{Guid.NewGuid()}");
+            string tempInstallDir = Path.Combine(Path.GetTempPath(), $"BypassDPI-WPF_Zapret_Temp_{Guid.NewGuid()}");
 
             try
             {
@@ -226,7 +226,7 @@ public static class AutoDownloadService
                     onLog("Проверяю контрольную сумму архива Zapret...");
                     if (!await ReserveComponentProvider.VerifyFileHashAsync(zapretDest, manifest.Zapret.Sha256))
                     {
-                        onError("❌ Ошибка проверки целостности резервной копии Zapret (хэш не совпадает).\n\nВозможные причины:\n• Файл резервной копии поврежден в процессе сборки\n• Резервный архив был модифицирован сторонней программой\n\nРекомендуется выполнить ручную установку или перекачать NetFix.");
+                        onError("❌ Ошибка проверки целостности резервной копии Zapret (хэш не совпадает).\n\nВозможные причины:\n• Файл резервной копии поврежден в процессе сборки\n• Резервный архив был модифицирован сторонней программой\n\nРекомендуется выполнить ручную установку или перекачать BypassDPI-WPF.");
                         return false;
                     }
 
@@ -254,7 +254,7 @@ public static class AutoDownloadService
                                 var src = Path.Combine(listsDir, fileName);
                                 if (File.Exists(src))
                                 {
-                                    var backup = Path.Combine(Path.GetTempPath(), $"NetFix_Preserve_{Guid.NewGuid()}_{fileName}");
+                                    var backup = Path.Combine(Path.GetTempPath(), $"BypassDPI-WPF_Preserve_{Guid.NewGuid()}_{fileName}");
                                     File.Copy(src, backup, true);
                                     preservedFiles.Add((src, backup));
                                     onLog($"  → {fileName} сохранён");
@@ -425,7 +425,7 @@ public static class AutoDownloadService
                     onLog("Проверяю контрольную сумму файла TgWsProxy...");
                     if (!await ReserveComponentProvider.VerifyFileHashAsync(tgWsDest, manifest.TgWsProxy.Sha256))
                     {
-                        onError("❌ Ошибка проверки целостности резервной копии TgWsProxy (хэш не совпадает).\n\nВозможные причины:\n• Файл резервной копии поврежден в процессе сборки\n• Исполняемый файл был модифицирован сторонней программой\n\nРекомендуется выполнить ручную установку или перекачать NetFix.");
+                        onError("❌ Ошибка проверки целостности резервной копии TgWsProxy (хэш не совпадает).\n\nВозможные причины:\n• Файл резервной копии поврежден в процессе сборки\n• Исполняемый файл был модифицирован сторонней программой\n\nРекомендуется выполнить ручную установку или перекачать BypassDPI-WPF.");
                         return false;
                     }
 
@@ -584,7 +584,7 @@ public static class AutoDownloadService
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("NetFix/1.0");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("BypassDPI-WPF/1.0");
 
             var json = await http.GetStringAsync($"https://api.github.com/repos/{repo}/releases/latest");
             using var doc = JsonDocument.Parse(json);
@@ -661,7 +661,7 @@ public static class AutoDownloadService
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("NetFix/1.0");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("BypassDPI-WPF/1.0");
 
             using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();

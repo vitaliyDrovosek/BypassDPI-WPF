@@ -173,7 +173,7 @@ public class HostsEntryModel
 {
     public string Ip { get; set; } = "";
     public string Hostname { get; set; } = "";
-    public bool IsNetFixManaged { get; set; }
+    public bool IsForkManaged { get; set; }
 }
 
 public class SystemOverviewModel

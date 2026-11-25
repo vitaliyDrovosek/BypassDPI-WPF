@@ -6,18 +6,17 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>NetFix</AssemblyName>
+    <AssemblyName>BypassDPI-WPF</AssemblyName>
     <RootNamespace>NetFix</RootNamespace>
     <Platforms>x64</Platforms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <RollForward>LatestMajor</RollForward>
     <Version>1.2.0</Version>
     <AssemblyVersion>1.2.0.0</AssemblyVersion>
     <FileVersion>1.2.0.0</FileVersion>
     <Copyright>© 2024-2026 rupleide</Copyright>
-    <Product>NetFix</Product>
-    <Description>NetFix - GUI приложение для обхода блокировок Telegram и Discord</Description>
+    <Product>BypassDPI-WPF</Product>
+    <Description>GUI-оболочка для обхода блокировок Telegram и Discord (неофициальный форк)</Description>
     <License>GPL-3.0-only</License>
   </PropertyGroup>
 
@@ -40,20 +39,7 @@
     <Resource Include="Assets\noise.png" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Include="Tracks\**\*.*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="Assets\Screenshots\hd_phototv.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <Resource Include="Assets\Screenshots\hd_phototv.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="DiscordRichPresence" Version="1.6.1.70" />
-  </ItemGroup>
-
-  <ItemGroup>
+<ItemGroup>
     <EmbeddedResource Include="Assets\Fallback\zapret-fallback.zip" Condition="Exists('Assets\Fallback\zapret-fallback.zip')" />
     <EmbeddedResource Include="Assets\Fallback\tgwsproxy-fallback.exe" Condition="Exists('Assets\Fallback\tgwsproxy-fallback.exe')" />
     <EmbeddedResource Include="Assets\Fallback\metadata.json" Condition="Exists('Assets\Fallback\metadata.json')" />

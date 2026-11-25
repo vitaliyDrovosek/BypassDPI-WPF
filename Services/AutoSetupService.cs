@@ -109,7 +109,7 @@ public static class AutoSetupService
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("NetFix/1.0");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("BypassDPI-WPF/1.0");
             var json = await http.GetStringAsync($"https://api.github.com/repos/{repo}/releases/latest");
             var doc = System.Text.Json.JsonDocument.Parse(json);
             return doc.RootElement.GetProperty("tag_name").GetString() ?? "";

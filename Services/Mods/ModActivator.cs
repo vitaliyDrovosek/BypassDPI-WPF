@@ -148,8 +148,8 @@ public static class ModActivator
 
             var currentLines = File.ReadAllLines(hostsPath).ToList();
 
-            int startIndex = currentLines.FindIndex(l => l.Contains("# --- NETFIX HOSTS MODS START ---"));
-            int endIndex = currentLines.FindIndex(l => l.Contains("# --- NETFIX HOSTS MODS END ---"));
+            int startIndex = currentLines.FindIndex(l => l.Contains("# --- BYPASSDPI HOSTS MODS START ---"));
+            int endIndex = currentLines.FindIndex(l => l.Contains("# --- BYPASSDPI HOSTS MODS END ---"));
 
             if (startIndex >= 0 && endIndex >= 0 && endIndex >= startIndex)
             {
@@ -170,7 +170,7 @@ public static class ModActivator
                 }
 
                 currentLines.Add("");
-                currentLines.Add("# --- NETFIX HOSTS MODS START ---");
+                currentLines.Add("# --- BYPASSDPI HOSTS MODS START ---");
 
                 foreach (var mod in activeHosts)
                 {
@@ -190,7 +190,7 @@ public static class ModActivator
                     }
                 }
 
-                currentLines.Add("# --- NETFIX HOSTS MODS END ---");
+                currentLines.Add("# --- BYPASSDPI HOSTS MODS END ---");
             }
 
             File.WriteAllLines(hostsPath, currentLines);

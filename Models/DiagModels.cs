@@ -106,20 +106,8 @@ public class AppSettings
     public bool AutostartApp { get; set; } = false;
     public bool AutoUpdates { get; set; } = true;
     public bool ShowLongCheckDialog { get; set; } = true;
-    public bool ShowGameOfferDialog { get; set; } = true;
-    public bool DiscordRpcEnabled { get; set; } = true;
-    public double GameVolume { get; set; } = 0.5;
-    public string FfmpegPath { get; set; } = "";
-    public bool DisableComboEffect { get; set; } = false;
+    public bool DiscordRpcEnabled { get; set; } = false;
     public FixMode Mode { get; set; } = FixMode.Full;
-    public string KeyLane0 { get; set; } = "A";
-    public string KeyLane1 { get; set; } = "S";
-    public string KeyLane2 { get; set; } = "W";
-    public string KeyLane3 { get; set; } = "D";
-    public List<GameTrackStats> TrackHistory { get; set; } = [];
-    public string StatsSortMode { get; set; } = "LastPlayedDesc";
-    public string UserSortMode { get; set; } = "DateAddedDesc";
-    public string OsuSortMode { get; set; } = "DateAddedDesc";
     public bool TgWsProxyCheckUpdates { get; set; } = true;
     public bool StartMinimizedToTray { get; set; } = false;
     public bool EnableZapret { get; set; } = true;
@@ -155,22 +143,4 @@ public class CustomDnsEntry
     public string Primary { get; set; } = "";
     public string Secondary { get; set; } = "";
     public string DohTemplate { get; set; } = "";
-}
-
-public record GameTrackStats
-{
-    public string TrackTitle { get; init; } = "";
-    public int TimesPlayed { get; set; }
-    public int BestScore { get; set; }
-    public int MinScore { get; set; } = int.MaxValue;
-    public double BestAccuracy { get; set; }
-    public double WorstAccuracy { get; set; } = 100;
-    public int BestCombo { get; set; }
-    public string BestRank { get; set; } = "F";
-    public int TotalKeyPresses { get; set; }
-    public int TotalHits { get; set; }
-    public int TotalMisses { get; set; }
-    public int TotalNotes { get; set; }
-    public DateTime LastPlayed { get; set; }
-    public DateTime FirstPlayed { get; set; } = DateTime.Now;
 }

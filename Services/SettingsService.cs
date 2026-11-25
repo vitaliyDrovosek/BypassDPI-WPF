@@ -9,9 +9,10 @@ namespace NetFix.Services;
 public static class SettingsService
 {
     private static readonly string AppDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NetFix");
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BypassDPI-WPF");
     private static readonly string SettingsFile = Path.Combine(AppDir, "settings.json");
     private static readonly string OnboardFile = Path.Combine(AppDir, ".onboarded");
+    private static readonly string LegalNoticeFile = Path.Combine(AppDir, ".legal-notice-accepted");
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -59,7 +60,23 @@ public static class SettingsService
 
     public static void Save(AppSettings s)
     {
-        try { File.WriteAllText(SettingsFile, JsonSerializer.Serialize(s, JsonOpts)); }
+        try
+        {
+            Directory.CreateDirectory(AppDir);
+            File.WriteAllText(SettingsFile, JsonSerializer.Serialize(s, JsonOpts));
+        }
+        catch { }
+    }
+
+    public static bool IsLegalNoticeAccepted => File.Exists(LegalNoticeFile);
+
+    public static void MarkLegalNoticeAccepted()
+    {
+        try
+        {
+            Directory.CreateDirectory(AppDir);
+            File.WriteAllText(LegalNoticeFile, "1");
+        }
         catch { }
     }
 

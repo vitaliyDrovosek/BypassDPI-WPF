@@ -334,7 +334,7 @@
 
                     <TextBlock FontFamily="Segoe UI" FontSize="13" TextWrapping="Wrap" LineHeight="20"
                                Foreground="#bbbbbb" Margin="0,0,0,8">
-                        <Run Foreground="#555558">-</Run><Run xml:space="preserve"> </Run><Run FontWeight="Bold" Foreground="White">Следите за обновлениями:</Run><Run xml:space="preserve"> Свежие моды вы можете найти в моём Telegram-канале </Run><Run FontWeight="Bold" Foreground="White">NetFix</Run><Run xml:space="preserve">, либо собрать собственный.</Run>
+                        <Run Foreground="#555558">-</Run><Run xml:space="preserve"> </Run><Run FontWeight="Bold" Foreground="White">Следите за обновлениями:</Run><Run xml:space="preserve"> Моды публикуются их авторами в открытых репозиториях, либо соберите собственный.</Run>
                     </TextBlock>
 
                     <Border Height="1" Background="#22222a" Margin="0,6,0,6"/>

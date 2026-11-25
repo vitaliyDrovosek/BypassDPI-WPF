@@ -68,7 +68,7 @@
                             <DropShadowEffect Color="#22C55E" BlurRadius="6" ShadowDepth="0" Opacity="0.7"/>
                         </Ellipse.Effect>
                     </Ellipse>
-                    <TextBlock Text="NetFix" Foreground="#F4F4F5"
+                    <TextBlock Text="BypassDPI-WPF" Foreground="#F4F4F5"
                                FontFamily="Segoe UI" FontSize="13" FontWeight="SemiBold"/>
                 </StackPanel>
                 <TextBlock Grid.Column="1" x:Name="VersionLabel" Text="v1.0" Foreground="#52525B"
