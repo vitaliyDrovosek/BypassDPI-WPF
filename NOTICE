@@ -11,5 +11,7 @@ Third-party components:
 - TgWsProxy: copyright Flowseal (https://github.com/Flowseal)
 
 This build includes modifications: Discord Rich Presence removed, automatic
-Telegram proxy activation removed, main button toggles start/stop, rhythm game removed.
+Telegram proxy activation removed, main button toggles start/stop and cancels
+preparation, rhythm game removed, maximize/restore support, adaptive layout,
+new application icon, fork notice available from the "About" button.
 Source of modifications: https://github.com/vitaliyDrovosek/BypassDPI-WPF

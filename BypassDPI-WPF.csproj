@@ -16,6 +16,7 @@
     <FileVersion>1.2.0.0</FileVersion>
     <Copyright>© 2024-2026 rupleide</Copyright>
     <Product>BypassDPI-WPF</Product>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Description>GUI-оболочка для обхода блокировок Telegram и Discord (неофициальный форк)</Description>
     <License>GPL-3.0-only</License>
   </PropertyGroup>
@@ -33,10 +34,12 @@
 
   <ItemGroup>
     <None Remove="Assets\noise.png" />
+    <None Remove="Assets\app.ico" />
   </ItemGroup>
 
   <ItemGroup>
     <Resource Include="Assets\noise.png" />
+    <Resource Include="Assets\app.ico" />
   </ItemGroup>
 
 <ItemGroup>
