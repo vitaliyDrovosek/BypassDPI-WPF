@@ -420,9 +420,21 @@ public partial class MainWindow : Window
             LogBox.Height = logH;
         }
 
-        double logW = LogBoxWrapper.ActualWidth > 0
-            ? LogBoxWrapper.ActualWidth
-            : (MainGrid.ActualWidth > 0 ? MainGrid.ActualWidth - 64 : 1200);
+        // Keep the log centered instead of glued to the left edge, while still
+        // letting it grow with the window up to a comfortable reading width.
+        double availableW = MainPage.ViewportWidth > 0 ? MainPage.ViewportWidth : MainGrid.ActualWidth;
+        double logW = Math.Max(320, Math.Min(availableW - 64, 1100));
+
+        LogHeaderContainer.Width = logW;
+        LogHeaderContainer.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
+
+        if (double.IsNaN(LogBoxWrapper.Width) || Math.Abs(LogBoxWrapper.Width - logW) > 1)
+        {
+            LogBoxWrapper.Width = logW;
+            LogBox.Width = logW;
+        }
+        LogBoxWrapper.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
+
         LogBoxClipGeom.Rect = new Rect(0, 0, logW, logH);
     }
 
