@@ -18,13 +18,19 @@
 
 ## Готовые сборки
 
-Готовый архив `BypassDPI-WPF-v1.2.2-win-x64.zip` публикуется в [Releases](https://github.com/vitaliyDrovosek/BypassDPI-WPF/releases). Внутри: `BypassDPI-WPF.exe`, `BypassDPI-WPF.dll`, `deps.json`, `runtimeconfig.json`, `LICENSE`, `NOTICE` и этот `README.md`. Контрольная сумма SHA256 указана в описании релиза.
+В [Releases](https://github.com/vitaliyDrovosek/BypassDPI-WPF/releases) доступны все варианты:
+
+- `BypassDPI-WPF-v1.2.2-win-x64.exe` — один самодостаточный файл, .NET и DLL не нужны;
+- `BypassDPI-WPF-v1.2.2-win-x64.zip` — классическая сборка: EXE, DLL, `deps.json`, `runtimeconfig.json`, `LICENSE`, `NOTICE`, `README.md`;
+- исходники этого тега (`Source code (zip / tar.gz)` на странице релиза).
+
+Контрольные суммы SHA256 указаны в описании релиза.
 
 ## Требования
 
 - Windows 10 / 11 (x64).
 - Права администратора запрашиваются автоматически при запуске — нужен драйвер WinDivert.
-- [.NET Desktop Runtime 8.0](https://dotnet.microsoft.com/download/dotnet/8.0) (windowsdesktop-runtime 8.0.x x64).
+- [.NET Desktop Runtime 8.0](https://dotnet.microsoft.com/download/dotnet/8.0) (windowsdesktop-runtime 8.0.x x64) — только для ZIP-сборки; одиночный EXE самодостаточен.
 
 Сторонние компоненты (Zapret, TgWsProxy) в репозитории не хранятся: приложение скачивает их напрямую с репозиториев авторов:
 
@@ -40,6 +46,12 @@ dotnet build BypassDPI-WPF.csproj -c Release -p:Platform=x64
 ```
 
 Готовый бинарник: `bin/x64/Release/net8.0-windows/BypassDPI-WPF.exe`.
+
+Один самодостаточный EXE:
+
+```powershell
+dotnet publish BypassDPI-WPF.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish\single
+```
 
 ## Соответствие лицензии GPL-3.0 и дополнительным условиям исходного проекта
 
