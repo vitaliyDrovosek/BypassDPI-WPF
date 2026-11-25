@@ -433,7 +433,7 @@ public partial class MainWindow : Window
         if (MaxBtn == null || MaxBtnIcon == null) return;
 
         bool maximized = WindowState == WindowState.Maximized;
-        MaxBtnIcon.Data = (PathGeometry)FindResource(maximized ? "RestoreIcon" : "MaximizeIcon");
+        MaxBtnIcon.Data = (Geometry)FindResource(maximized ? "RestoreIcon" : "MaximizeIcon");
         MaxBtn.ToolTip = maximized ? "Восстановить" : "Развернуть";
     }
 
