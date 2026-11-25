@@ -1,6 +1,9 @@
 using System;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
+using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -14,11 +17,18 @@ public partial class App : Application
 {
     private const string MutexName = "BypassDPI-WPF_SingleInstance_Mutex";
     private const string PipeName = "BypassDPI-WPF_SingleInstance_Pipe";
+    private const string ElevatedArgument = "--elevated";
     private static Mutex? _mutex;
     private static CancellationTokenSource? _pipeCts;
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        if (Array.IndexOf(e.Args, ElevatedArgument) < 0 && !IsAdministrator() && TryElevate(e.Args))
+        {
+            Shutdown();
+            return;
+        }
+
         _mutex = new Mutex(true, MutexName, out bool isNewInstance);
         if (!isNewInstance)
         {
@@ -93,6 +103,51 @@ public partial class App : Application
                 }
             }
         });
+    }
+
+    private static bool IsAdministrator()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+    }
+
+    private static bool TryElevate(string[] args)
+    {
+        try
+        {
+            var executable = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(executable))
+            {
+                return false;
+            }
+
+            var startInfo = new ProcessStartInfo(executable)
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+                WorkingDirectory = AppContext.BaseDirectory
+            };
+            startInfo.ArgumentList.Add(ElevatedArgument);
+            foreach (var arg in args)
+            {
+                startInfo.ArgumentList.Add(arg);
+            }
+
+            Process.Start(startInfo);
+            return true;
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            System.Windows.MessageBox.Show("Запуск от имени администратора отменён.", "BypassDPI-WPF",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"Не удалось повысить права: {ex.Message}", "BypassDPI-WPF",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            return true;
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
