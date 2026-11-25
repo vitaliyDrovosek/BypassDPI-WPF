@@ -8891,6 +8891,114 @@ public partial class MainWindow : Window
         parent.Children.Add(card);
     }
 
+    private void AboutPageBtn_Click(object s, RoutedEventArgs e) => ShowAboutWindow();
+
+    internal static void ShowAboutWindow()
+    {
+        var root = new StackPanel { Margin = new Thickness(22) };
+
+        root.Children.Add(new TextBlock
+        {
+            Text = "BypassDPI-WPF (fork of NetFix by rupleide)",
+            FontSize = 16,
+            FontWeight = FontWeights.Bold,
+            Foreground = Brushes.White,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 14)
+        });
+
+        root.Children.Add(new TextBlock
+        {
+            Text =
+                "ВНИМАНИЕ! Вы запускаете неофициальный форк программы NetFix. " +
+                "Оригинальный автор (rupleide) не имеет отношения к этой сборке, " +
+                "не гарантирует её безопасность и не оказывает поддержку. " +
+                "Оригинальный чистый NetFix доступен по адресу: github.com/rupleide/NetFix",
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 13,
+            LineHeight = 20,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xdd, 0xdd, 0xdd)),
+            Margin = new Thickness(0, 0, 0, 16)
+        });
+
+        root.Children.Add(new TextBlock
+        {
+            Text =
+                "Лицензия: GPL-3.0. Исходники изменений: " +
+                "github.com/vitaliyDrovosek/BypassDPI-WPF\n" +
+                "Сторонние компоненты Zapret и TgWsProxy: © Flowseal.",
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12,
+            LineHeight = 18,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
+            Margin = new Thickness(0, 0, 0, 20)
+        });
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Right
+        };
+
+        var repoBtn = new Button
+        {
+            Content = "Исходники",
+            Width = 110,
+            Height = 32,
+            Margin = new Thickness(0, 0, 8, 0),
+            Background = Brushes.Transparent,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x3b, 0x82, 0xf6)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
+            BorderThickness = new Thickness(1),
+            Cursor = Cursors.Hand
+        };
+        repoBtn.Click += (_, _) =>
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "https://github.com/vitaliyDrovosek/BypassDPI-WPF",
+                    UseShellExecute = true
+                });
+            }
+            catch { }
+        };
+
+        var closeBtn = new Button
+        {
+            Content = "Закрыть",
+            Width = 100,
+            Height = 32,
+            IsDefault = true,
+            Background = new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x25)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand
+        };
+
+        buttons.Children.Add(repoBtn);
+        buttons.Children.Add(closeBtn);
+        root.Children.Add(buttons);
+
+        var window = new Window
+        {
+            Title = "О программе — BypassDPI-WPF",
+            Width = 500,
+            SizeToContent = SizeToContent.Height,
+            MinHeight = 300,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x18)),
+            Foreground = Brushes.White,
+            ResizeMode = ResizeMode.NoResize,
+            ShowInTaskbar = false,
+            Content = root
+        };
+        closeBtn.Click += (_, _) => window.Close();
+        window.Owner = System.Windows.Application.Current.MainWindow;
+        window.ShowDialog();
+    }
+
     private void SettingsBtn_Click(object s, RoutedEventArgs e)
     {
         if (_settingsOpen) CloseSettings();

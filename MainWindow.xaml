@@ -1255,7 +1255,11 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <Grid Grid.Row="0" Margin="32,20,32,0">
-                        <StackPanel Orientation="Horizontal">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="0"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
                             <Button x:Name="FaqBackBtn" Style="{StaticResource BackBtn}"
                                     WindowChrome.IsHitTestVisibleInChrome="True"
                                     Click="FaqBackBtn_Click">
@@ -1274,6 +1278,10 @@
                                        FontWeight="Bold" Foreground="White"
                                        VerticalAlignment="Center" Margin="16,0,0,0"/>
                         </StackPanel>
+                        <Button Grid.Column="1" Content="О программе" Style="{StaticResource FlatBtn}"
+                                FontSize="12" Padding="10,4"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
+                                Click="AboutPageBtn_Click"/>
                     </Grid>
                     <Border Grid.Row="1" Height="1" Background="#333333" Margin="32,14,32,0"/>
                     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="32,14,32,0">
