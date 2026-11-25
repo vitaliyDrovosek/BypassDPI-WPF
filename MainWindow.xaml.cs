@@ -11930,7 +11930,7 @@ public partial class MainWindow : Window
             LogBoxWrapper.RenderTransform = new TranslateTransform(0, 14);
         }
 
-        UIElement?[] navButtons = [ServicesBtn, ModsNavBtn, FaqNavBtn, DiagNavBtn, SettingsBtn, MinBtn, CloseBtn];
+        UIElement?[] navButtons = [ServicesBtn, ModsNavBtn, FaqNavBtn, DiagNavBtn, SettingsBtn, MinBtn, MaxBtn, CloseBtn];
         foreach (var btn in navButtons)
         {
             if (btn == null) continue;
@@ -12070,7 +12070,7 @@ public partial class MainWindow : Window
         }
 
         int navDelay = baseDelayMs + 140;
-        UIElement?[] navButtons = [ServicesBtn, ModsNavBtn, FaqNavBtn, DiagNavBtn, SettingsBtn, MinBtn, CloseBtn];
+        UIElement?[] navButtons = [ServicesBtn, ModsNavBtn, FaqNavBtn, DiagNavBtn, SettingsBtn, MinBtn, MaxBtn, CloseBtn];
         foreach (var btn in navButtons)
         {
             if (btn == null) continue;
