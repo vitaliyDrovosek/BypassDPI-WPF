@@ -411,8 +411,9 @@ public partial class MainWindow : Window
         if (LogBoxClipGeom == null || LogBoxWrapper == null) return;
 
         // The log grows with the window instead of staying at a fixed 270 px.
-        double available = MainPage.ActualHeight > 0 ? MainPage.ActualHeight : MainGrid.ActualHeight;
-        double logH = Math.Max(270, available - 430);
+        // Keep a small reserve so even a modest maximize gives visible growth.
+        double available = MainPage.ViewportHeight > 0 ? MainPage.ViewportHeight : MainGrid.ActualHeight;
+        double logH = Math.Max(270, available - 240);
         if (Math.Abs(LogBoxWrapper.Height - logH) > 1)
         {
             LogBoxWrapper.Height = logH;
