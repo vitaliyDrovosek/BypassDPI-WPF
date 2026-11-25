@@ -242,6 +242,13 @@ public partial class MainWindow : Window
 
         Loaded += OnLoaded;
         SizeChanged += OnSizeChanged;
+        // Recalculate the log size after the ScrollViewer itself has laid out;
+        // window SizeChanged runs too early and leaves a stale viewport width.
+        MainPage.SizeChanged += (_, _) => UpdateLogClip();
+        MainPage.IsVisibleChanged += (_, _) =>
+            Dispatcher.BeginInvoke(new Action(UpdateLogClip), DispatcherPriority.Loaded);
+        StateChanged += (_, _) =>
+            Dispatcher.BeginInvoke(new Action(UpdateLogClip), DispatcherPriority.Loaded);
         InitTray();
 
         _auroraTimer = new DispatcherTimer(DispatcherPriority.Render);
@@ -420,20 +427,16 @@ public partial class MainWindow : Window
             LogBox.Height = logH;
         }
 
-        // Keep the log centered instead of glued to the left edge, while still
-        // letting it grow with the window up to a comfortable reading width.
+        // Center the whole log block in one host instead of aligning separate
+        // children; this survives the entrance animation and resize cycles.
         double availableW = MainPage.ViewportWidth > 0 ? MainPage.ViewportWidth : MainGrid.ActualWidth;
         double logW = Math.Max(320, Math.Min(availableW - 64, 1100));
 
-        LogHeaderContainer.Width = logW;
-        LogHeaderContainer.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
-
-        if (double.IsNaN(LogBoxWrapper.Width) || Math.Abs(LogBoxWrapper.Width - logW) > 1)
+        if (LogCenterHost != null)
         {
-            LogBoxWrapper.Width = logW;
-            LogBox.Width = logW;
+            LogCenterHost.Width = logW;
+            LogCenterHost.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
         }
-        LogBoxWrapper.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
 
         LogBoxClipGeom.Rect = new Rect(0, 0, logW, logH);
     }

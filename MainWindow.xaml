@@ -1219,28 +1219,34 @@
                                            Foreground="#888888" Margin="0,5,0,0"/>
                                 <Border Height="1" Background="#333333" Margin="0,24,0,0"/>
                             </StackPanel>
-                            <Grid x:Name="LogHeaderContainer" Margin="0,16,0,0">
-                                <TextBlock Text="Лог" FontFamily="Segoe UI" FontSize="13"
-                                           FontWeight="Bold" Foreground="#888888" VerticalAlignment="Center"/>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <Button Content="Скопировать" Style="{StaticResource FlatBtn}" FontSize="11"
-                                            Height="24" Padding="8,2" Margin="0,0,8,0"
-                                            WindowChrome.IsHitTestVisibleInChrome="True"
-                                            Click="CopyLog_Click"/>
-                                    <Button Content="Очистить" Style="{StaticResource FlatBtn}" FontSize="11"
-                                            Height="24" Padding="8,2"
-                                            WindowChrome.IsHitTestVisibleInChrome="True"
-                                            Click="ClearLog_Click"/>
-                                </StackPanel>
-                            </Grid>
-                            <Grid x:Name="LogBoxWrapper" Height="270" Margin="0,8,0,16">
-                                <Grid.Clip>
-                                    <RectangleGeometry x:Name="LogBoxClipGeom" Rect="0,0,1200,270" RadiusX="10" RadiusY="10"/>
-                                </Grid.Clip>
-                                <RichTextBox x:Name="LogBox" Style="{StaticResource LogBox}"
-                                             Height="270" VerticalAlignment="Top">
-                                    <FlowDocument PagePadding="0"/>
-                                </RichTextBox>
+                            <Grid x:Name="LogCenterHost" HorizontalAlignment="Center" Width="1100">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid x:Name="LogHeaderContainer" Grid.Row="0" Margin="0,16,0,0">
+                                    <TextBlock Text="Лог" FontFamily="Segoe UI" FontSize="13"
+                                               FontWeight="Bold" Foreground="#888888" VerticalAlignment="Center"/>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Button Content="Скопировать" Style="{StaticResource FlatBtn}" FontSize="11"
+                                                Height="24" Padding="8,2" Margin="0,0,8,0"
+                                                WindowChrome.IsHitTestVisibleInChrome="True"
+                                                Click="CopyLog_Click"/>
+                                        <Button Content="Очистить" Style="{StaticResource FlatBtn}" FontSize="11"
+                                                Height="24" Padding="8,2"
+                                                WindowChrome.IsHitTestVisibleInChrome="True"
+                                                Click="ClearLog_Click"/>
+                                    </StackPanel>
+                                </Grid>
+                                <Grid x:Name="LogBoxWrapper" Grid.Row="1" Height="270" Margin="0,8,0,16">
+                                    <Grid.Clip>
+                                        <RectangleGeometry x:Name="LogBoxClipGeom" Rect="0,0,1100,270" RadiusX="10" RadiusY="10"/>
+                                    </Grid.Clip>
+                                    <RichTextBox x:Name="LogBox" Style="{StaticResource LogBox}"
+                                                 Height="270" VerticalAlignment="Top">
+                                        <FlowDocument PagePadding="0"/>
+                                    </RichTextBox>
+                                </Grid>
                             </Grid>
                         </StackPanel>
                     </StackPanel>
