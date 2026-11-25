@@ -26,13 +26,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Backup_18.03.2026_ 0-05\**" />
-    <Page Remove="Backup_18.03.2026_ 0-05\**" />
-    <None Remove="Backup_18.03.2026_ 0-05\**" />
-    <EmbeddedResource Remove="Backup_18.03.2026_ 0-05\**" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Remove="Assets\noise.png" />
     <None Remove="Assets\app.ico" />
   </ItemGroup>

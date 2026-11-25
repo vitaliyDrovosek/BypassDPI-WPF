@@ -16,6 +16,10 @@
 - Уведомление о неофициальном характере сборки показывается при первом запуске.
 - Соблюдены дополнительные условия GPL-3.0 Section 7 исходного проекта (см. ниже).
 
+## Готовые сборки
+
+Готовый архив `BypassDPI-WPF-v1.2.2-win-x64.zip` публикуется в [Releases](https://github.com/vitaliyDrovosek/BypassDPI-WPF/releases). Внутри: `BypassDPI-WPF.exe`, `BypassDPI-WPF.dll`, `deps.json`, `runtimeconfig.json`, `LICENSE`, `NOTICE` и этот `README.md`. Контрольная сумма SHA256 указана в описании релиза.
+
 ## Требования
 
 - Windows 10 / 11 (x64).
