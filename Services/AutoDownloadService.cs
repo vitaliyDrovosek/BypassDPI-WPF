@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
 using NetFix.Services.Mods;
@@ -27,10 +28,13 @@ public static class AutoDownloadService
         Action<double> onProgress,
         Action<string> onError,
         bool preserveLists = false,
-        bool forceReserve = false)
+        bool forceReserve = false,
+        CancellationToken cancellationToken = default)
     {
         try
         {
+            if (cancellationToken.IsCancellationRequested) return false;
+
             onLog("=== Запуск автоматической установки ===");
             onLog("Подготовка папки установки...");
 
@@ -479,6 +483,7 @@ public static class AutoDownloadService
 
                 if (tgWsProxyWasRunning && !string.IsNullOrEmpty(tgWsExe))
                 {
+                    if (cancellationToken.IsCancellationRequested) return false;
                     onLog("Перезапускаю TgWsProxy...");
                     try
                     {
@@ -516,6 +521,10 @@ public static class AutoDownloadService
                     catch { }
                 }
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return false;
         }
         catch (NotSupportedException ex)
         {

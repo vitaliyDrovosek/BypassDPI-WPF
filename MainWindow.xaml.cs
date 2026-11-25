@@ -146,6 +146,9 @@ public partial class MainWindow : Window
     private DateTime _connectedSince;
     private DispatcherTimer? _connectedTimer;
     private bool _isInstalling = false;
+    private CancellationTokenSource? _prepCts;
+    private Border? _longCheckOverlay;
+    private Border? _longCheckDialogCard;
     private DispatcherTimer? _successRingTimer;
     private SolidColorBrush? _successRingIconBrush;
 
@@ -262,6 +265,8 @@ public partial class MainWindow : Window
                 _auroraTimer.Stop();
             else
                 _auroraTimer.Start();
+
+            UpdateWindowChromeState();
         };
     }
 
@@ -307,7 +312,7 @@ public partial class MainWindow : Window
     {
         if (_settings.DiscordRpcEnabled)
             _discord.Initialize();
-        UpdateMainGridClip();
+        UpdateWindowChromeState();
         LoadSettingsToPanel();
         UpdateSelectedConfigDisplay();
         _settingsLoaded = true;
@@ -390,15 +395,46 @@ public partial class MainWindow : Window
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        UpdateMainGridClip();
+        UpdateWindowChromeState();
     }
 
     private void UpdateMainGridClip()
     {
-        var rect = new RectangleGeometry(
+        double radius = WindowState == WindowState.Maximized ? 0 : 11;
+        MainGrid.Clip = new RectangleGeometry(
             new Rect(0, 0, MainGrid.ActualWidth, MainGrid.ActualHeight),
-            11, 11);
-        MainGrid.Clip = rect;
+            radius, radius);
+    }
+
+    private void UpdateLogClip()
+    {
+        if (LogBoxClipGeom != null && LogBoxWrapper != null && LogBoxWrapper.ActualWidth > 0)
+            LogBoxClipGeom.Rect = new Rect(0, 0, LogBoxWrapper.ActualWidth, LogBoxWrapper.ActualHeight);
+    }
+
+    private void UpdateWindowChromeState()
+    {
+        bool maximized = WindowState == WindowState.Maximized;
+
+        RootBorder.CornerRadius = new CornerRadius(maximized ? 0 : 12);
+        RootBorder.BorderThickness = new Thickness(maximized ? 0 : 1);
+        AppHeaderBar.CornerRadius = new CornerRadius(maximized ? 0 : 11, maximized ? 0 : 11, 0, 0);
+        AppBottomBar.CornerRadius = new CornerRadius(0, 0, maximized ? 0 : 11, maximized ? 0 : 11);
+        if (EntranceCurtain != null)
+            EntranceCurtain.CornerRadius = new CornerRadius(maximized ? 0 : 11);
+
+        UpdateMainGridClip();
+        UpdateLogClip();
+        UpdateMaximizeButton();
+    }
+
+    private void UpdateMaximizeButton()
+    {
+        if (MaxBtn == null || MaxBtnIcon == null) return;
+
+        bool maximized = WindowState == WindowState.Maximized;
+        MaxBtnIcon.Data = (PathGeometry)FindResource(maximized ? "RestoreIcon" : "MaximizeIcon");
+        MaxBtn.ToolTip = maximized ? "Восстановить" : "Развернуть";
     }
 
     private void InitTray()
@@ -474,6 +510,7 @@ public partial class MainWindow : Window
     protected override void OnStateChanged(EventArgs e)
     {
         base.OnStateChanged(e);
+        UpdateWindowChromeState();
         if (WindowState == WindowState.Normal)
         {
             _auroraTimer?.Start();
@@ -3269,6 +3306,67 @@ public partial class MainWindow : Window
         }
     }
 
+    private bool IsPreparing => _checkInProgress || _autoFixRunning || _isInstalling;
+
+    private CancellationToken BeginPreparation()
+    {
+        _prepCts = new CancellationTokenSource();
+        _checkInProgress = true;
+        StartLongCheckTimer();
+        return _prepCts.Token;
+    }
+
+    private CancellationToken EnsurePreparationToken()
+    {
+        if (_prepCts == null)
+            _prepCts = new CancellationTokenSource();
+
+        if (!_checkInProgress)
+        {
+            _checkInProgress = true;
+            StartLongCheckTimer();
+        }
+
+        return _prepCts.Token;
+    }
+
+    private void FinishPreparation()
+    {
+        _prepCts = null;
+    }
+
+    private void CancelPreparation()
+    {
+        if (!IsPreparing) return;
+
+        _prepCts?.Cancel();
+        _prepCts = null;
+
+        RemoveLongCheckDialog();
+        StopLongCheckTimer();
+        _checkInProgress = false;
+        _autoFixRunning = false;
+        _isInstalling = false;
+        _discord.IsScanning = false;
+        StopGlow(false);
+        SetFixBtnDisconnected();
+        AppendLog("Запуск отменён", "warn");
+    }
+
+    private void RemoveLongCheckDialog()
+    {
+        if (_longCheckOverlay != null)
+        {
+            MainGrid.Children.Remove(_longCheckOverlay);
+            _longCheckOverlay = null;
+        }
+        if (_longCheckDialogCard != null)
+        {
+            MainGrid.Children.Remove(_longCheckDialogCard);
+            _longCheckDialogCard = null;
+        }
+    }
+
     private void ShowLongCheckDialog()
     {
         var overlay = new Border
@@ -3278,6 +3376,7 @@ public partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Stretch
         };
         Grid.SetRowSpan(overlay, 3);
+        _longCheckOverlay = overlay;
         MainGrid.Children.Add(overlay);
 
         var dialogCard = new Border
@@ -3299,6 +3398,7 @@ public partial class MainWindow : Window
             }
         };
         Grid.SetRowSpan(dialogCard, 3);
+        _longCheckDialogCard = dialogCard;
 
         var cardContent = new StackPanel
         {
@@ -3393,10 +3493,37 @@ public partial class MainWindow : Window
             _settings.ShowLongCheckDialog = showAgainCb.IsChecked != true;
             SettingsService.Save(_settings);
             ShowServiceReminderCB.IsChecked = _settings.ShowLongCheckDialog;
-            MainGrid.Children.Remove(overlay);
-            MainGrid.Children.Remove(dialogCard);
+            RemoveLongCheckDialog();
         };
-        cardContent.Children.Add(okBtn);
+        var cancelBtn = new Button
+        {
+            Content = "Отменить запуск",
+            Width = 140,
+            Height = 40,
+            Margin = new Thickness(10, 0, 0, 0),
+            Background = Brushes.Transparent,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xcc, 0xcc, 0xcc)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
+            BorderThickness = new Thickness(1),
+            FontSize = 13,
+            Cursor = Cursors.Hand
+        };
+        cancelBtn.Click += (_, _) =>
+        {
+            _settings.ShowLongCheckDialog = showAgainCb.IsChecked != true;
+            SettingsService.Save(_settings);
+            ShowServiceReminderCB.IsChecked = _settings.ShowLongCheckDialog;
+            CancelPreparation();
+        };
+
+        var buttonsPanel = new StackPanel
+        {
+            Orientation = System.Windows.Controls.Orientation.Horizontal,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Center
+        };
+        buttonsPanel.Children.Add(okBtn);
+        buttonsPanel.Children.Add(cancelBtn);
+        cardContent.Children.Add(buttonsPanel);
 
         dialogCard.Child = cardContent;
         MainGrid.Children.Add(dialogCard);
@@ -3422,8 +3549,7 @@ public partial class MainWindow : Window
             _settings.ShowLongCheckDialog = showAgainCb.IsChecked != true;
             SettingsService.Save(_settings);
             ShowServiceReminderCB.IsChecked = _settings.ShowLongCheckDialog;
-            MainGrid.Children.Remove(overlay);
-            MainGrid.Children.Remove(dialogCard);
+            RemoveLongCheckDialog();
         };
     }
 
@@ -4131,7 +4257,30 @@ public partial class MainWindow : Window
 
     private void Header_Drag(object sender, MouseButtonEventArgs e)
     {
-        if (e.ButtonState == MouseButtonState.Pressed) DragMove();
+        if (e.ButtonState != MouseButtonState.Pressed) return;
+
+        if (e.ClickCount == 2)
+        {
+            ToggleMaximize();
+            return;
+        }
+
+        if (WindowState == WindowState.Maximized)
+            SystemCommands.RestoreWindow(this);
+
+        DragMove();
+    }
+
+    private void MaxBtn_Click(object s, RoutedEventArgs e) => ToggleMaximize();
+
+    private void ToggleMaximize()
+    {
+        if (WindowState == WindowState.Maximized)
+            SystemCommands.RestoreWindow(this);
+        else
+            SystemCommands.MaximizeWindow(this);
+
+        UpdateWindowChromeState();
     }
 
     private void MinBtn_Click(object s, RoutedEventArgs e) => WindowState = WindowState.Minimized;
@@ -5207,8 +5356,11 @@ public partial class MainWindow : Window
 
     private void FixBtn_Toggle_Click(object s, RoutedEventArgs e)
     {
-        if (_checkInProgress || _autoFixRunning || _isInstalling)
+        if (IsPreparing)
+        {
+            CancelPreparation();
             return;
+        }
 
         if (!_isConnected)
         {
@@ -5223,8 +5375,7 @@ public partial class MainWindow : Window
 
     private async void FixBtn_Click(object s, RoutedEventArgs e)
     {
-        if (_checkInProgress || _autoFixRunning || _isInstalling) return;
-
+        if (IsPreparing) return;
 
         if (!_settings.EnableZapret && !_settings.EnableTgWsProxy)
         {
@@ -5232,9 +5383,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        FixBtn.IsEnabled = false;
-        _checkInProgress = true;
-        StartLongCheckTimer();
+        var ct = BeginPreparation();
 
         if (_settings.Mode == FixMode.Fast)
         {
@@ -5243,6 +5392,7 @@ public partial class MainWindow : Window
         }
 
         var (needsUpdate, reason) = await ComponentVersionService.CheckIfUpdateNeededAsync(_settings);
+        if (ct.IsCancellationRequested) return;
 
         if (needsUpdate)
         {
@@ -5253,6 +5403,7 @@ public partial class MainWindow : Window
         }
 
         var st = DiagnosticsEngine.CheckAppStatus();
+        if (ct.IsCancellationRequested) return;
 
         if (_settings.EnableZapret
             && !st.ZapretRunning
@@ -5261,9 +5412,12 @@ public partial class MainWindow : Window
         {
             StopLongCheckTimer();
             _checkInProgress = false;
+            FinishPreparation();
             ShowZapretWizard();
             return;
         }
+
+        if (ct.IsCancellationRequested) return;
 
         if (_settings.EnableTgWsProxy
             && !st.TgWsProxyRunning
@@ -5273,19 +5427,19 @@ public partial class MainWindow : Window
             StartTgWsProxyWithActivation();
         }
 
+        if (ct.IsCancellationRequested) return;
+
         RunAutoFix();
     }
 
     private async void RunAutoFix()
     {
-        if (_autoFixRunning)
-        {
-            return;
-        }
+        if (_autoFixRunning) return;
 
+        var ct = EnsurePreparationToken();
         _autoFixRunning = true;
 
-        EnterWorkingState("Подготовка...");
+        EnterWorkingState("Подготовка...", "запуск");
         LogBox.Document.Blocks.Clear();
 
         string timeStr = DateTime.Now.ToString("HH:mm:ss");
@@ -5297,11 +5451,13 @@ public partial class MainWindow : Window
 
         AppendLog("СЕТЕВАЯ СРЕДА", "system");
         bool netOk = await DiagnosticsEngine.CheckInternetAsync();
+        if (ct.IsCancellationRequested) return;
         AppendLog($"Интернет-соединение: {(netOk ? "[ ПОДКЛЮЧЕНО ]" : "[ ОШИБКА ]")}", netOk ? "ok" : "error");
 
         AppendLog("АНАЛИЗ ТРАФИКА И DPI", "system");
         var report = await DiagnosticsEngine.RunFullDiagnosticsAsync(
             (ratio, label) => Dispatcher.Invoke(() => {
+                if (ct.IsCancellationRequested) return;
                 SetupProg.Value = ratio * 50;
                 SetupProgLbl.Text = label;
 
@@ -5318,6 +5474,7 @@ public partial class MainWindow : Window
                 LogBox.Document.Blocks.Add(p);
             })
         );
+        if (ct.IsCancellationRequested) return;
 
         Dispatcher.Invoke(() => RenderDiagReport(report));
 
@@ -5334,12 +5491,19 @@ public partial class MainWindow : Window
 
         AppendLog("ЗАПУСК ИСПРАВЛЕНИЙ", "system");
         AutoSetupService.Run(
-            logCb: (msg, kind) => AppendLog(msg, kind == "step" ? "speed" : kind),
+            logCb: (msg, kind) => Dispatcher.Invoke(() =>
+            {
+                if (ct.IsCancellationRequested) return;
+                AppendLog(msg, kind == "step" ? "speed" : kind);
+            }),
             progressCb: ratio => Dispatcher.Invoke(() => {
+                if (ct.IsCancellationRequested) return;
                 SetupProg.Value = 50 + (ratio * 50);
                 SetupProgLbl.Text = $"Настройка: {(int)(ratio * 100)}%";
             }),
             doneCb: (success, _) => Dispatcher.Invoke(async () => {
+                if (ct.IsCancellationRequested) return;
+
                 StopGlow(success);
 
                 _discord.IsScanning = false;
@@ -5373,6 +5537,7 @@ public partial class MainWindow : Window
                 }
 
                 await Task.Delay(2500);
+                if (ct.IsCancellationRequested) return;
 
                 var appStatus = DiagnosticsEngine.CheckAppStatus();
                 _discord.SetAllGood(appStatus.ZapretRunning, appStatus.TgWsProxyRunning);
@@ -5388,16 +5553,21 @@ public partial class MainWindow : Window
                         _mainZapretStartFails = 0;
                     }
                 }
+
+                FinishPreparation();
             }),
-            settings: _settings);
+            settings: _settings,
+            cancellationToken: ct);
     }
 
     private async void RunFastFix()
     {
         if (_autoFixRunning) return;
+
+        var ct = EnsurePreparationToken();
         _autoFixRunning = true;
 
-        EnterWorkingState("Быстрый запуск...");
+        EnterWorkingState("Быстрый запуск...", "запуск");
         LogBox.Document.Blocks.Clear();
 
         string timeStr = DateTime.Now.ToString("HH:mm:ss");
@@ -5426,6 +5596,7 @@ public partial class MainWindow : Window
         AppendLog("spacer");
         AppendLog("СЕТЕВАЯ СРЕДА", "system");
         bool netOk = await DiagnosticsEngine.CheckInternetAsync();
+        if (ct.IsCancellationRequested) return;
         AppendLog($"Интернет-соединение: [ {(netOk ? "ПОДКЛЮЧЕНО" : "НЕТ ПОДКЛЮЧЕНИЯ")} ]", "ok");
 
         AppendLog("spacer");
@@ -5463,6 +5634,7 @@ public partial class MainWindow : Window
             _checkInProgress = false;
             _autoFixRunning = false;
             FixBtn.IsEnabled = true;
+            FinishPreparation();
             return;
         }
 
@@ -5471,6 +5643,7 @@ public partial class MainWindow : Window
 
         if (zapretNeeded)
         {
+            if (ct.IsCancellationRequested) return;
             AppendLog("Zapret не запущен — запускаю...", "info");
             var isServiceBat = Path.GetFileName(_settings.ZapretPath)
                 .Equals("service.bat", StringComparison.OrdinalIgnoreCase);
@@ -5480,6 +5653,7 @@ public partial class MainWindow : Window
                 var cache = ZapretConfigService.LoadCache();
                 bool success = await ZapretConfigService.ApplyConfigAsync(
                     _settings.ZapretPath, cache?.CurrentConfig ?? "");
+                if (ct.IsCancellationRequested) return;
                 zapretOk = success;
             }
             else
@@ -5500,9 +5674,11 @@ public partial class MainWindow : Window
             AppendLog("Zapret уже работает", "ok");
         }
 
+        if (ct.IsCancellationRequested) return;
         SetupProg.Value = 50;
         SetupProgLbl.Text = "TgWsProxy...";
         await Task.Delay(300);
+        if (ct.IsCancellationRequested) return;
 
         if (tgwsNeeded)
         {
@@ -5533,6 +5709,7 @@ public partial class MainWindow : Window
         }
 
         await Task.Delay(300);
+        if (ct.IsCancellationRequested) return;
         AnimateProgressBar(100, Color.FromRgb(34, 197, 94), "Готово", 0.5);
 
         StopGlow(zapretOk || tgwsOk);
@@ -5562,12 +5739,14 @@ public partial class MainWindow : Window
         _checkInProgress = false;
         _autoFixRunning = false;
         FixBtn.IsEnabled = true;
+        FinishPreparation();
     }
 
     private async Task RunAutoInstallAsync(bool preserveLists = false)
     {
+        var ct = EnsurePreparationToken();
         _isInstalling = true;
-        EnterWorkingState("Подготовка к установке...");
+        EnterWorkingState("Подготовка к установке...", "установку");
         LogBox.Document.Blocks.Clear();
 
         string timeStr = DateTime.Now.ToString("HH:mm:ss");
@@ -5575,7 +5754,16 @@ public partial class MainWindow : Window
         AppendLog("spacer");
 
         AppendLog("Проверяю доступность GitHub...", "info");
-        var availability = await GitHubAvailabilityChecker.CheckAvailabilityAsync();
+        GitHubAvailabilityResult availability;
+        try
+        {
+            availability = await GitHubAvailabilityChecker.CheckAvailabilityAsync(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return;
+        }
+        if (ct.IsCancellationRequested) return;
 
         bool useReserve = false;
 
@@ -5591,20 +5779,27 @@ public partial class MainWindow : Window
         AppendLog("spacer");
 
         bool success = await AutoDownloadService.AutoInstallAllAsync(
-            onLog: msg => Dispatcher.Invoke(() => AppendLog(msg, "info")),
+            onLog: msg => Dispatcher.Invoke(() => {
+                if (!ct.IsCancellationRequested) AppendLog(msg, "info");
+            }),
             onProgress: ratio => Dispatcher.Invoke(() => {
+                if (ct.IsCancellationRequested) return;
                 SetupProg.Value = ratio * 100;
                 SetupProgLbl.Text = $"Установка: {(int)(ratio * 100)}%";
             }),
             onError: err => Dispatcher.Invoke(() => {
+                if (ct.IsCancellationRequested) return;
                 AppendLog("spacer");
                 AppendLog(err, "error");
             }),
             preserveLists: preserveLists,
-            forceReserve: useReserve
+            forceReserve: useReserve,
+            cancellationToken: ct
         );
 
         Dispatcher.Invoke(() => {
+            if (ct.IsCancellationRequested) return;
+
             _isInstalling = false;
             StopGlow(success);
             FixBtn.IsEnabled = true;
@@ -5654,6 +5849,8 @@ public partial class MainWindow : Window
                 AppendLog("затем выберите «Ручная установка» и следуйте инструкциям.", "info");
                 PlayErrorRing();
             }
+
+            FinishPreparation();
         });
     }
 
@@ -5839,15 +6036,13 @@ public partial class MainWindow : Window
         }
     }
 
-    private void EnterWorkingState(string label)
+    private void EnterWorkingState(string label, string cancelLabel = "запуск")
     {
         _isConnected = false;
         _connectedTimer?.Stop();
         _connectedTimer = null;
 
-        AnimateButtonLabel("Починить", "интернет");
-
-        FixBtn.IsEnabled = false;
+        AnimateButtonLabel("Отмена", cancelLabel);
 
         SetupProg.BeginAnimation(System.Windows.Controls.ProgressBar.ValueProperty, null);
         SetupProg.BeginAnimation(System.Windows.Controls.ProgressBar.ForegroundProperty, null);
@@ -11725,7 +11920,8 @@ public partial class MainWindow : Window
         if (LogBoxClipGeom != null)
         {
             LogBoxClipGeom.BeginAnimation(RectangleGeometry.RectProperty, null);
-            LogBoxClipGeom.Rect = new Rect(0, 0, 1200, 0);
+            double logW = LogBoxWrapper.ActualWidth > 0 ? LogBoxWrapper.ActualWidth : 1200;
+            LogBoxClipGeom.Rect = new Rect(0, 0, logW, 0);
         }
         if (LogBoxWrapper != null)
         {
@@ -12053,9 +12249,12 @@ public partial class MainWindow : Window
         {
             var boxTrans = new TranslateTransform(0, 14);
             LogBoxWrapper.RenderTransform = boxTrans;
+            double logW = LogBoxWrapper.ActualWidth > 0 ? LogBoxWrapper.ActualWidth : 1200;
 
             LogBoxClipGeom.BeginAnimation(RectangleGeometry.RectProperty,
-                new RectAnimation(new Rect(0, 0, 1200, 0), new Rect(0, 0, 1200, 270), TimeSpan.FromMilliseconds(800))
+                new RectAnimation(new Rect(0, 0, logW, 0),
+                                  new Rect(0, 0, logW, LogBoxWrapper.ActualHeight > 0 ? LogBoxWrapper.ActualHeight : 270),
+                                  TimeSpan.FromMilliseconds(800))
                 {
                     BeginTime = TimeSpan.FromMilliseconds(baseDelayMs + 560),
                     EasingFunction = easeQuint
@@ -12658,6 +12857,8 @@ public partial class MainWindow : Window
 
         this.StateChanged += (s, e) =>
         {
+            UpdateWindowChromeState();
+
             if (this.WindowState == WindowState.Minimized)
             {
                 StopConnectionAnalysis();

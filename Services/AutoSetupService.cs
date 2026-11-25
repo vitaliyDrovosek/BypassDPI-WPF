@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Threading;
 using NetFix.Models;
 
 namespace NetFix.Services;
@@ -14,11 +15,12 @@ public static class AutoSetupService
         Action<string, string> logCb,
         Action<double> progressCb,
         Action<bool, string> doneCb,
-        AppSettings settings)
+        AppSettings settings,
+        CancellationToken cancellationToken = default)
     {
         Task.Run(async () =>
         {
-            try { await RunAsync(logCb, progressCb, doneCb, settings); }
+            try { await RunAsync(logCb, progressCb, doneCb, settings, cancellationToken); }
             catch (Exception e) { logCb($"Неожиданная ошибка: {e.Message}", "error"); doneCb(false, "exception"); }
         });
     }
@@ -27,11 +29,13 @@ public static class AutoSetupService
         Action<string, string> log,
         Action<double> progress,
         Action<bool, string> done,
-        AppSettings settings)
+        AppSettings settings,
+        CancellationToken cancellationToken)
     {
         log("Проверяю подключение к интернету…", "info");
         progress(0.05);
         bool hasNet = await DiagnosticsEngine.CheckInternetAsync();
+        if (cancellationToken.IsCancellationRequested) return;
         if (!hasNet)
         {
             log("Нет интернета. Подключитесь и попробуйте снова.", "error");
@@ -43,8 +47,9 @@ public static class AutoSetupService
         await Task.Delay(200);
 
         log("Проверяю последние версии инструментов…", "info");
-        string zapretVer   = settings.EnableZapret ? await GetLatestGitHubRelease(ZapretRepo) : "";
-        string tgWsVer     = settings.EnableTgWsProxy ? await GetLatestGitHubRelease(TgWsProxyRepo) : "";
+        string zapretVer   = settings.EnableZapret ? await GetLatestGitHubRelease(ZapretRepo, cancellationToken) : "";
+        string tgWsVer     = settings.EnableTgWsProxy ? await GetLatestGitHubRelease(TgWsProxyRepo, cancellationToken) : "";
+        if (cancellationToken.IsCancellationRequested) return;
         progress(0.20);
 
         if (settings.EnableZapret)
@@ -58,6 +63,7 @@ public static class AutoSetupService
             else
             {
                 log($"Zapret найден: {settings.ZapretPath}", "ok");
+                if (cancellationToken.IsCancellationRequested) return;
                 if (!IsProcessRunning(["zapret", "nfqws", "winws"]))
                     TryLaunch(settings.ZapretPath, log);
                 else
@@ -82,6 +88,7 @@ public static class AutoSetupService
             else
             {
                 log($"tg-ws-proxy найден: {settings.TgWsProxyPath}", "ok");
+                if (cancellationToken.IsCancellationRequested) return;
                 if (!IsProcessRunning(["tg-ws-proxy", "tgwsproxy"]))
                     TryLaunch(settings.TgWsProxyPath, log);
                 else
@@ -99,18 +106,20 @@ public static class AutoSetupService
         progress(1.0);
         await Task.Delay(200);
 
+        if (cancellationToken.IsCancellationRequested) return;
+
         log("", "spacer");
         log("Готово! Telegram должен работать нормально.", "success");
         done(true, "ok");
     }
 
-    private static async Task<string> GetLatestGitHubRelease(string repo)
+    private static async Task<string> GetLatestGitHubRelease(string repo, CancellationToken cancellationToken)
     {
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
             http.DefaultRequestHeaders.UserAgent.ParseAdd("BypassDPI-WPF/1.0");
-            var json = await http.GetStringAsync($"https://api.github.com/repos/{repo}/releases/latest");
+            var json = await http.GetStringAsync($"https://api.github.com/repos/{repo}/releases/latest", cancellationToken);
             var doc = System.Text.Json.JsonDocument.Parse(json);
             return doc.RootElement.GetProperty("tag_name").GetString() ?? "";
         }
