@@ -8861,102 +8861,6 @@ public partial class MainWindow : Window
         parent.Children.Add(card);
     }
 
-    private void AboutBtn_Click(object s, RoutedEventArgs e) => ShowForkNotice();
-
-    internal static void ShowForkNotice()
-    {
-        var root = new StackPanel { Margin = new Thickness(22) };
-
-        root.Children.Add(new TextBlock
-        {
-            Text = "О приложении",
-            FontSize = 18,
-            FontWeight = FontWeights.Bold,
-            Foreground = Brushes.White,
-            Margin = new Thickness(0, 0, 0, 14)
-        });
-
-        root.Children.Add(new TextBlock
-        {
-            Text =
-                "BypassDPI-WPF — неофициальный форк NetFix.\n\n" +
-                "Оригинальный автор (rupleide) не имеет отношения к этой сборке, " +
-                "не гарантирует её безопасность и не оказывает поддержку.\n" +
-                "Оригинальный чистый NetFix: github.com/rupleide/NetFix\n\n" +
-                "Исходники форка: github.com/vitaliyDrovosek/BypassDPI-WPF\n" +
-                "Лицензия: GPL-3.0. Изменения: © 2026 vitaliyDrovosek.",
-            TextWrapping = TextWrapping.Wrap,
-            FontSize = 13,
-            LineHeight = 20,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xdd, 0xdd, 0xdd)),
-            Margin = new Thickness(0, 0, 0, 20)
-        });
-
-        var buttons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Right
-        };
-
-        var repoBtn = new Button
-        {
-            Content = "Репозиторий форка",
-            Width = 150,
-            Height = 32,
-            Margin = new Thickness(0, 0, 8, 0),
-            Background = Brushes.Transparent,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x3b, 0x82, 0xf6)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
-            BorderThickness = new Thickness(1),
-            Cursor = Cursors.Hand
-        };
-        repoBtn.Click += (_, _) =>
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "https://github.com/vitaliyDrovosek/BypassDPI-WPF",
-                    UseShellExecute = true
-                });
-            }
-            catch { }
-        };
-
-        var closeBtn = new Button
-        {
-            Content = "Закрыть",
-            Width = 100,
-            Height = 32,
-            IsDefault = true,
-            Background = new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x25)),
-            Foreground = Brushes.White,
-            BorderThickness = new Thickness(0),
-            Cursor = Cursors.Hand
-        };
-
-        buttons.Children.Add(repoBtn);
-        buttons.Children.Add(closeBtn);
-        root.Children.Add(buttons);
-
-        var window = new Window
-        {
-            Title = "О приложении — BypassDPI-WPF",
-            Width = 480,
-            SizeToContent = SizeToContent.Height,
-            MinHeight = 260,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x18)),
-            Foreground = Brushes.White,
-            ResizeMode = ResizeMode.NoResize,
-            ShowInTaskbar = false,
-            Content = root
-        };
-        closeBtn.Click += (_, _) => window.Close();
-        window.Owner = System.Windows.Application.Current.MainWindow;
-        window.ShowDialog();
-    }
-
     private void SettingsBtn_Click(object s, RoutedEventArgs e)
     {
         if (_settingsOpen) CloseSettings();
@@ -12026,7 +11930,7 @@ public partial class MainWindow : Window
             LogBoxWrapper.RenderTransform = new TranslateTransform(0, 14);
         }
 
-        UIElement?[] navButtons = [ServicesBtn, ModsNavBtn, FaqNavBtn, DiagNavBtn, AboutBtn, SettingsBtn, MinBtn, MaxBtn, CloseBtn];
+        UIElement?[] navButtons = [ServicesBtn, ModsNavBtn, FaqNavBtn, DiagNavBtn, SettingsBtn, MinBtn, MaxBtn, CloseBtn];
         foreach (var btn in navButtons)
         {
             if (btn == null) continue;
@@ -12166,7 +12070,7 @@ public partial class MainWindow : Window
         }
 
         int navDelay = baseDelayMs + 140;
-        UIElement?[] navButtons = [ServicesBtn, ModsNavBtn, FaqNavBtn, DiagNavBtn, AboutBtn, SettingsBtn, MinBtn, MaxBtn, CloseBtn];
+        UIElement?[] navButtons = [ServicesBtn, ModsNavBtn, FaqNavBtn, DiagNavBtn, SettingsBtn, MinBtn, MaxBtn, CloseBtn];
         foreach (var btn in navButtons)
         {
             if (btn == null) continue;

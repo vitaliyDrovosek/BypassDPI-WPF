@@ -13,5 +13,5 @@ Third-party components:
 This build includes modifications: Discord Rich Presence removed, automatic
 Telegram proxy activation removed, main button toggles start/stop and cancels
 preparation, rhythm game removed, maximize/restore support, adaptive layout,
-new application icon, fork notice available from the "About" button.
+new application icon.
 Source of modifications: https://github.com/vitaliyDrovosek/BypassDPI-WPF
